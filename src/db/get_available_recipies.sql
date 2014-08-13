@@ -1,7 +1,10 @@
 -- Determine which cocktails can be made based on the ingredients
 -- currently configured in the dispenser table
 
-SELECT 		r.id
+.mode column
+.width 6 32 128
+
+SELECT 		r.id, r.name, r.description
 FROM 		recipe r 
 WHERE 		r.id NOT IN (
 	-- sub-select lists IDs of recipes which have missing ingredients

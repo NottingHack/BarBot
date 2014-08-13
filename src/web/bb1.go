@@ -3,6 +3,7 @@ package main
 
 import (
   "fmt"
+  "os"
   "html/template"
   "net/http"
   "database/sql"
@@ -21,8 +22,10 @@ const ORDER_FMT = "%05d"
 type Recipe struct {
   Id   int
   Name string
+  Description string
   Selected bool
-  Glass_type_id int
+  GlassName string
+  ImageName string
 }
 
 type DrinksMenu struct {
@@ -142,19 +145,21 @@ func getReceipes(db *sql.DB) ([]Recipe) {
 
   // Load drinks - only show those that can currently be made
   rows, err := db.Query(
-     `select r.id, r.name 
-      from recipe r
-      where not exists 
+     `select   r.id, r.name, r.description, gt.name
+      from     recipe r,
+		       glass_type gt
+      where    r.glass_type_id = gt.id
+      and not exists 
       (
-        select null
-        from recipe r2
-        inner join recipe_ingredient ri on r2.id = ri.recipe_id
-        inner join ingredient i on i.id = ri.ingredient_id
-        inner join dispenser_type dt on dt.id = i.dispenser_type_id
-        left outer join dispenser d on cast(d.ingredient_id as integer) = cast(ri.ingredient_id as integer)
-        where d.id is null 
-        and dt.manual = 0
-        and r2.id = r.id
+          select      null
+          from        recipe r2
+          inner join  recipe_ingredient ri on r2.id = ri.recipe_id
+          inner join  ingredient i on i.id = ri.ingredient_id
+          inner join  dispenser_type dt on dt.id = i.dispenser_type_id
+          left outer  join dispenser d on cast(d.ingredient_id as integer) = cast(ri.ingredient_id as integer)
+          where       d.id is null 
+          and         dt.manual = 0
+          and         r2.id = r.id
       )`)
   if err != nil {
     // TODO
@@ -164,7 +169,12 @@ func getReceipes(db *sql.DB) ([]Recipe) {
 
   for rows.Next() {
     var recipe Recipe
-    rows.Scan(&recipe.Id, &recipe.Name)
+    rows.Scan(&recipe.Id, &recipe.Name, &recipe.Description, &recipe.GlassName)
+	if _, err := os.Stat(recipe.ImageName + ".jpg"); os.IsNotExist(err) {
+		recipe.ImageName = "0_generic_" + strings.ToLower(recipe.GlassName)
+	} else {
+		recipe.ImageName = strings.Replace(strings.ToLower(recipe.Name), " ", "_", -1)
+	}
     recipes = append(recipes, recipe)
   }
   rows.Close()
