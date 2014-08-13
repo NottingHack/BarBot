@@ -623,8 +623,10 @@ func adminMenu(w http.ResponseWriter, r *http.Request, param string) {
   }
   
   if strings.HasPrefix(param, "make/") {
-    // *** TODO ***
-    http.NotFound(w, r)
+    if !makeOrderDirect(db, w, r, param[len("make/"):]) {
+      http.NotFound(w, r)
+      return
+    }
     return
   }
   
@@ -750,7 +752,7 @@ func makeOrder(db *sql.DB, w http.ResponseWriter, r *http.Request, p string) boo
   
   // Generate command list. This will fail if not all the ingrediants are present
   fmt.Printf("makeOrder: preparing command list for order [%d]\n", drink_order_id)
-  cmdList, ret := getCommandList(drink_order_id)
+  cmdList, ret := getCommandList(drink_order_id, -1)
   
   if ret != 0 {
     fmt.Printf("makeOrder: failed to generate command list!\n")
@@ -779,6 +781,42 @@ func makeOrder(db *sql.DB, w http.ResponseWriter, r *http.Request, p string) boo
     
   return true
 }
+
+// makeOrderDirect expect <p> to be the recipe_id
+func makeOrderDirect(db *sql.DB, w http.ResponseWriter, r *http.Request, p string) bool {
+  var details OrderSent
+  
+  recipe_id, err := strconv.Atoi(p)
+  if err != nil {
+    return false 
+  }
+
+  tmpl, _ := template.ParseFiles("admin_header.html", "admin_make.html", "admin_footer.html")
+
+  // Generate command list. This will fail if not all the ingrediants are present
+  fmt.Printf("makeOrder: preparing command list for receipe [%d]\n", recipe_id)
+  cmdList, ret := getCommandList(-1, recipe_id)
+
+  if ret != 0 {
+    fmt.Printf("makeOrder: failed to generate command list!\n")
+    details.Success = false
+    details.FailReason = "Missing ingrediant(s)"
+    t, _ := template.ParseFiles("order_make.html")
+    t.Execute(w, details)
+    return true
+  }
+  details.Success = true
+
+  BarbotSerialChan <- cmdList
+
+  tmpl.ExecuteTemplate(w, "admin_header", nil)
+  tmpl.ExecuteTemplate(w, "admin_make", details)
+  tmpl.ExecuteTemplate(w, "admin_footer", nil)
+  tmpl.Execute(w, details)
+
+  return true
+}
+
 
 // completeOrder marks the drink as made in the database, then redirects to the order list
 func completeOrder(db *sql.DB, w http.ResponseWriter, r *http.Request, p string) bool {
@@ -951,7 +989,7 @@ func BBSerial(instructionList chan []string, serialPort string) {
 }
 
 // getCommandList takes a drink_order_id, and returns a set of insturctions to be sent to barbot to make it
-func getCommandList(drink_order_id int) ([]string, int) {
+func getCommandList(drink_order_id int, recipe_id int) ([]string, int) {
 /*
  * Instructions generated:
  *   M nnnnn               - move to rail position nnnnn
@@ -962,13 +1000,18 @@ func getCommandList(drink_order_id int) ([]string, int) {
    db := getDBConnection()
    defer db.Close()
  
+   var sql_param int
+   
    // Get a list of ingrediants required
-   sqlstr := `select 
-                i.id,
-                ri.qty,
-                i.dispenser_param,
-                dt.id,
-                dt.unit_size
+  sqlstr := `select 
+               i.id,
+               ri.qty,
+               i.dispenser_param,
+               dt.id,
+               dt.unit_size
+             `
+  if drink_order_id > 0 { // order id given, use that...
+    sqlstr += `
               from drink_order do
               inner join recipe r on r.id = do.recipe_id
               inner join recipe_ingredient ri on ri.recipe_id = r.id
@@ -977,19 +1020,30 @@ func getCommandList(drink_order_id int) ([]string, int) {
               where do.id = ?
                 and dt.manual = 0
               order by ri.seq`
+    sql_param = drink_order_id
+   } else { // ... otherwise search by recipe_id
+    sqlstr += `
+              from recipe r
+              inner join recipe_ingredient ri on ri.recipe_id = r.id
+              inner join ingredient i on i.id = ri.ingredient_id
+              inner join dispenser_type dt on dt.id = i.dispenser_type_id
+              where r.id = ?
+                and dt.manual = 0
+              order by ri.seq`
+    sql_param = recipe_id
+  }
 
-  rows, err := db.Query(sqlstr, drink_order_id)
+  rows, err := db.Query(sqlstr, sql_param)
   if err != nil {
     panic(fmt.Sprintf("%v", err))
   }
   defer rows.Close()
 
-  
   commandList := make([]string, 1)
-  
+
   // Clear any previous instructions
   commandList = append(commandList, fmt.Sprintf("C"))
-  
+
   for rows.Next() {
     var ingredient_id int
     var qty int
