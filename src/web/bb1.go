@@ -41,6 +41,7 @@ type MenuItemIngredient struct {
 type MenuItem struct {
   Id          int
   DrinkName   string
+  Direct      bool
   Ingredients []MenuItemIngredient
 }
 
@@ -64,6 +65,15 @@ type OrderDetails struct {
   OrderRefs   []string  // list of order refs for order selection list on left of screen
   Ingredients []MenuItemIngredient
   Glass       GlassType
+}
+
+type RecipeDetails struct {
+  DrinkName   string
+  Alcohol     bool
+  Vegan       bool
+  Ingredients []MenuItemIngredient
+  Glass       GlassType
+  RecipeID    string
 }
 
 type DispenserIngredients struct {
@@ -116,47 +126,53 @@ const (
 
 
 var BarbotSerialChan chan []string
+var Direct bool
 
 // showMenu displays the list of available drinks to the user
 func showMenu(db *sql.DB, w http.ResponseWriter) {
 
-      // Load drinks - only show those that can currently be made
-      rows, err := db.Query(
-         `select r.id, r.name 
-          from recipe r
-          where not exists 
-          (
-            select null
-            from recipe r2
-            inner join recipe_ingredient ri on r2.id = ri.recipe_id
-            inner join ingredient i on i.id = ri.ingredient_id
-            inner join dispenser_type dt on dt.id = i.dispenser_type_id
-            left outer join dispenser d on cast(d.ingredient_id as integer) = cast(ri.ingredient_id as integer)
-            where d.id is null 
-            and dt.manual = 0
-            and r2.id = r.id
-          )`)
-      if err != nil {
-        // TODO
-        panic(fmt.Sprintf("%v", err))
-      }
-      defer rows.Close()
+  menu := DrinksMenu{"Drinks", getReceipes(db)}
 
-      var recipes []Recipe
-      for rows.Next() {
-        var recipe Recipe
-        rows.Scan(&recipe.Id, &recipe.Name)
-        recipes = append(recipes, recipe)
-      }
-      rows.Close()
-
-      menu := DrinksMenu{"Drinks", recipes}
-
-      t, _ := template.ParseFiles("menu.html")
-      t.Execute(w, menu)
+  t, _ := template.ParseFiles("menu.html")
+  t.Execute(w, menu)
 }
 
-// showMenuItem shows details of a  In   int // current ingrediant drink selected from the menu (ingredients, etc)
+func getReceipes(db *sql.DB) ([]Recipe) {
+  var recipes []Recipe
+
+  // Load drinks - only show those that can currently be made
+  rows, err := db.Query(
+     `select r.id, r.name 
+      from recipe r
+      where not exists 
+      (
+        select null
+        from recipe r2
+        inner join recipe_ingredient ri on r2.id = ri.recipe_id
+        inner join ingredient i on i.id = ri.ingredient_id
+        inner join dispenser_type dt on dt.id = i.dispenser_type_id
+        left outer join dispenser d on cast(d.ingredient_id as integer) = cast(ri.ingredient_id as integer)
+        where d.id is null 
+        and dt.manual = 0
+        and r2.id = r.id
+      )`)
+  if err != nil {
+    // TODO
+    panic(fmt.Sprintf("%v", err))
+  }
+  defer rows.Close()
+
+  for rows.Next() {
+    var recipe Recipe
+    rows.Scan(&recipe.Id, &recipe.Name)
+    recipes = append(recipes, recipe)
+  }
+  rows.Close()
+
+  return recipes
+}
+
+// showMenuItem shows details of a drink selected from the menu (ingredients, etc)
 func showMenuItem(db *sql.DB, w http.ResponseWriter, r *http.Request) {
       var menuitem MenuItem
       drink_id := r.URL.Path[len("/menu/"):]
@@ -168,7 +184,7 @@ func showMenuItem(db *sql.DB, w http.ResponseWriter, r *http.Request) {
         http.NotFound(w, r)
         return
       }
-
+      menuitem.Direct = Direct
       menuitem.Ingredients = getRecipeIngrediants(db, drink_id)
 
       t, _ := template.ParseFiles("menu_item.html")
@@ -239,11 +255,15 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
     case strings.HasPrefix(req_page, "recipe/"):
       adminRecipe(w, r, req_page[len("recipe/"):])
       return;
-      
+
     case strings.HasPrefix(req_page, "control/"):
       adminControl(w, r, req_page[len("control/"):])
       return;
 
+    case strings.HasPrefix(req_page, "menu/"):
+      adminMenu(w, r, req_page[len("menu/"):])
+      return;
+      
     default:
       http.NotFound(w, r)
       return
@@ -504,7 +524,7 @@ func adminDispenser(w http.ResponseWriter, r *http.Request, param string) {
     var dispenser_id int
     var dispenser_name string
     var current int
-      
+
     rows.Scan(&dispenser_id, &dispenser_name, &current, &ingr.Id, &ingr.Name)
     if current==1 {
       ingr.Current = true
@@ -546,6 +566,8 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
 
   if (sendmsg) {
     BarbotSerialChan <- cmdlist
+    http.Redirect(w, r, "/admin/control/", http.StatusSeeOther)
+    return
   }
 
   tmpl.ExecuteTemplate(w, "admin_header" , nil)
@@ -554,6 +576,65 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
   return
 }
 
+func adminMenu(w http.ResponseWriter, r *http.Request, param string) {
+  tmpl, _ := template.ParseFiles("admin_header.html", "admin_menu.html", "admin_recipe_details.html", "admin_footer.html")
+
+  // Open database
+  db := getDBConnection()
+  defer db.Close()
+
+  if strings.HasPrefix(param, "details/") {
+    recipe_id := param[len("details/"):]
+
+    // Assume recipe_id passed in (->404 if not), so also get the details of that drink
+    sqlstr := `
+      select
+        r.name,
+        gt.id,
+        gt.name
+      from recipe r
+      inner join glass_type gt on r.glass_type_id = gt.id
+      where r.id = ?`
+    var receipe RecipeDetails
+    row := db.QueryRow(sqlstr, recipe_id)
+
+    err := row.Scan(&receipe.DrinkName, &receipe.Glass.Id, &receipe.Glass.Name)
+    if err == sql.ErrNoRows {
+      http.NotFound(w, r)
+      return
+    } else {
+      if err != nil {
+        panic(fmt.Sprintf("adminMenu - failed to get recipe details: %#v", err))
+      }
+    }
+
+    tx, _ := db.Begin()
+    defer tx.Rollback()
+    receipe.Alcohol = recipeContainsAlcohol(tx, recipe_id)
+      
+    // Get list of ingrediants
+    receipe.Ingredients = getRecipeIngrediants(db, recipe_id)
+    receipe.RecipeID = recipe_id
+    
+    tmpl.ExecuteTemplate(w, "admin_header", nil)
+    tmpl.ExecuteTemplate(w, "admin_recipe_details", receipe)
+    tmpl.ExecuteTemplate(w, "admin_footer", nil)
+    return
+  }
+  
+  if strings.HasPrefix(param, "make/") {
+    // *** TODO ***
+    http.NotFound(w, r)
+    return
+  }
+  
+  menu := DrinksMenu{"Drinks", getReceipes(db)}
+
+  tmpl.ExecuteTemplate(w, "admin_header", nil)
+  tmpl.ExecuteTemplate(w, "admin_menu"  , menu)
+  tmpl.ExecuteTemplate(w, "admin_footer", nil)
+  return
+}
 
 // orderListHandler handles requests to /orderlist/
 func orderListHandler(w http.ResponseWriter, r *http.Request) {
@@ -977,13 +1058,23 @@ func getIngredientPosition(ingredient_id int) (int, int) {
 }
 
 func main() {
+  // Two modes of operation:
+  // 1. Normal - View drinks list at /menu/, order, then operator uses /orderlist/ to pick then make the drink
+  // 2. Direct - Drinks menu available at /menu/, but no option to order. Drinks can be made by picking from
+  //             a list at /admin/drinks/
   
   var serialPort = flag.String("serial", "/dev/ttyS0", "Serial port to use")
+  var direct =  flag.Bool("direct", false, "Disable order interface")
   flag.Parse()
-  
+  Direct = *direct
+
   http.HandleFunc("/menu/", drinksMenuHandler)
-  http.HandleFunc("/order/", orderDrinkHandler)
-  http.HandleFunc("/orderlist/", orderListHandler) // TODO: password protect (e.g. using go-http-auth)
+
+  if !Direct {
+    http.HandleFunc("/order/", orderDrinkHandler)
+    http.HandleFunc("/orderlist/", orderListHandler) // TODO: password protect (e.g. using go-http-auth)
+  }
+
   http.HandleFunc("/admin/", adminHandler)
   http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
   http.Handle("/", http.FileServer(http.Dir("static")))
