@@ -12,7 +12,7 @@
 #include "CSlice.h"
 #include "CMixer.h"
 #include "CDasher.h"
-//#include "CSyringe.h"
+#include "CSyringe.h"
 
 #include "Arduino.h"
 #include "AccelStepper.h"

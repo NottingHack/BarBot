@@ -1059,6 +1059,9 @@ func getCommandList(drink_order_id int, recipe_id int) ([]string, int) {
 
   // Clear any previous instructions
   commandList = append(commandList, fmt.Sprintf("C"))
+  
+  // Alway zero first
+  commandList = append(commandList, fmt.Sprintf("Z"))
 
   for rows.Next() {
     var ingredient_id int
@@ -1090,7 +1093,7 @@ func getCommandList(drink_order_id int, recipe_id int) ([]string, int) {
   }
   
   // move to home position when done
-  commandList = append(commandList, fmt.Sprintf("M 0"))
+  commandList = append(commandList, fmt.Sprintf("M 7080")) // TODO: move to home command.
   
   // Go!
   commandList = append(commandList, fmt.Sprintf("G"))

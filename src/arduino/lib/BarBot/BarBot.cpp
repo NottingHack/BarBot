@@ -28,7 +28,7 @@ BarBot::BarBot()
       case 14:  _dispeners[ix] = new CDasher(24, 25);  break; // Dasher1
       case 15:  _dispeners[ix] = new CDasher(26, 27);  break; // Dasher2
         
-      case 16: /* TODO */   _dispeners[ix] = NULL;     break;  // Syringe
+      case 16:  _dispeners[ix] = new CSyringe(5,6);    break;  // Syringe
         
       case 17: _dispeners[ix] = new CConveyor(38, 39); break;  // Conveyor
         
