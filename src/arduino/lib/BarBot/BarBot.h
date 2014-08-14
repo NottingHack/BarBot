@@ -12,6 +12,7 @@
 #include "CSlice.h"
 #include "CMixer.h"
 #include "CDasher.h"
+//#include "CSyringe.h"
 
 #include "Arduino.h"
 #include "AccelStepper.h"
@@ -22,6 +23,7 @@
 #define MAX_MOVE_TIME      19000  // Maximum amount of time moving the platform should take (in ms).
 #define STEPS_PER_CM          48  // Number of steps per CM (platform movement)
 #define MAX_RAIL_POSITION   7080  // Maximum number of steps
+#define RESET_POSITION     14000  // Position to move to when moving to the limit switch
 
 // Harware setup
 #define DISPENSER_COUNT       21  // Number of attached dispensers. If altered, also need to change BarBot::BarBot()
@@ -76,6 +78,7 @@ class BarBot
          
     bool exec_instruction(uint16_t instruction);
     void move_to(long pos);
+    void move_to(long pos, bool force);
     void set_state(barbot_state state);
     
     barbot_state _state;
