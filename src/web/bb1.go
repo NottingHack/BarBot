@@ -27,6 +27,9 @@ type Recipe struct {
   Selected bool
   GlassName string
   ImageName string
+  Vegan bool
+  Alcoholic bool
+  Flags string
 }
 
 type DrinksMenu struct {
@@ -153,23 +156,26 @@ func getReceipes(db *sql.DB) ([]Recipe) {
   var recipes []Recipe
 
   // Load drinks - only show those that can currently be made
-  rows, err := db.Query(
-     `select   r.id, r.name, r.description, gt.name
-      from     recipe r,
-		       glass_type gt
-      where    r.glass_type_id = gt.id
-      and not exists 
-      (
-          select      null
-          from        recipe r2
-          inner join  recipe_ingredient ri on r2.id = ri.recipe_id
-          inner join  ingredient i on i.id = ri.ingredient_id
-          inner join  dispenser_type dt on dt.id = i.dispenser_type_id
-          left outer  join dispenser d on cast(d.ingredient_id as integer) = cast(ri.ingredient_id as integer)
-          where       d.id is null 
-          and         dt.manual = 0
-          and         r2.id = r.id
-      )`)
+  rows, err := db.Query(`   SELECT       r.id, r.name, r.description, gt.name, SUM(NOT i.vegan) > 0, SUM(i.alcoholic) > 0
+							FROM         recipe r,
+										 glass_type gt,
+										 ingredient i,
+										 recipe_ingredient ri
+							WHERE        r.glass_type_id = gt.id
+							AND          r.id = ri.recipe_id
+							AND          i.id = ri.ingredient_id
+							AND NOT EXISTS (
+								SELECT       NULL
+								FROM         recipe r2
+								INNER JOIN   recipe_ingredient ri2 ON r2.id = ri2.recipe_id
+								INNER JOIN   ingredient i2 ON i2.id = ri2.ingredient_id
+								INNER JOIN   dispenser_type dt ON dt.id = i2.dispenser_type_id
+								LEFT OUTER   JOIN dispenser d ON CAST(d.ingredient_id AS INTEGER) = CAST(ri.ingredient_id AS INTEGER)
+								WHERE        d.id IS NULL
+								AND          dt.manual = 0
+								AND          r2.id = r.id
+							)
+							GROUP BY     r.id, r.name, r.description, gt.name`)
   if err != nil {
     // TODO
     panic(fmt.Sprintf("%v", err))
@@ -178,14 +184,23 @@ func getReceipes(db *sql.DB) ([]Recipe) {
 
   for rows.Next() {
     var recipe Recipe
-    rows.Scan(&recipe.Id, &recipe.Name, &recipe.Description, &recipe.GlassName)
+    rows.Scan(&recipe.Id, &recipe.Name, &recipe.Description, &recipe.GlassName, &recipe.Vegan, &recipe.Alcoholic)
 	re := regexp.MustCompile("[^a-zA-Z_ ]")
-	imageFile := strings.Replace(strings.ToLower(re.ReplaceAllString(recipe.Name, "")) + ".jpg", " ", "_", -1)
-	if _, err := os.Stat("static/images/receipes/" + imageFile); os.IsNotExist(err) {
+	imageFile := "static/images/receipes/" + strings.Replace(strings.ToLower(re.ReplaceAllString(recipe.Name, "")) + ".jpg", " ", "_", -1)
+	if _, err := os.Stat(imageFile); os.IsNotExist(err) {
 		fmt.Printf("could not find image file \"%s\"\n", imageFile)
-		recipe.ImageName = "0_generic_" + strings.ToLower(recipe.GlassName) + ".jpg"
+		recipe.ImageName = "static/images/receipes/0_generic_" + strings.ToLower(recipe.GlassName) + ".jpg"
 	} else {
 		recipe.ImageName = imageFile
+	}
+	recipe.Flags = ""
+	if recipe.Vegan {
+		recipe.Flags += "Vegan "
+	}
+	if recipe.Alcoholic {
+		recipe.Flags += "Alcohoic"
+	} else {
+		recipe.Flags += "Non-Alcoholic"
 	}
     recipes = append(recipes, recipe)
   }
