@@ -28,7 +28,7 @@ BarBot::BarBot()
       case 14:  _dispeners[ix] = new CDasher(24, 25);  break; // Dasher1
       case 15:  _dispeners[ix] = new CDasher(26, 27);  break; // Dasher2
         
-      case 16: /* TODO */   _dispeners[ix] = NULL;     break;  // Syringe
+      case 16:  _dispeners[ix] = new CSyringe(5,6);    break;  // Syringe
         
       case 17: _dispeners[ix] = new CConveyor(38, 39); break;  // Conveyor
         
@@ -108,9 +108,8 @@ bool BarBot::instructions_clear()
 
 bool BarBot::reset()
 {
-  set_state(BarBot::FAULT); // Ensure stopped
+  set_state(BarBot::FAULT); // Stop everything
   instructions_clear();
-  move_to(0);
   set_state(BarBot::IDLE);
 }
 
@@ -164,6 +163,7 @@ bool BarBot::exec_instruction(uint16_t ins)
       break;
 
     case MOVE:
+      _stepper->setMaxSpeed(SPEED_NORMAL);
       move_to(cmd->param1);
       _stepper->run();
       break;
@@ -179,7 +179,7 @@ bool BarBot::exec_instruction(uint16_t ins)
 
     case ZERO:
       _stepper->setMaxSpeed(SPEED_ZERO);
-      move_to(14000);  // TODO: suitable value
+      move_to(RESET_POSITION, true);
       _stepper->run();
       break;
   }
@@ -192,6 +192,7 @@ bool BarBot::loop()
 {
   instruction *cmd = &_instructions[_current_instruction];
   bool done = false;
+  bool limit_switch_hit = false;
   
   _stepper->run();
     
@@ -203,25 +204,37 @@ bool BarBot::loop()
 
   _stepper->run();
   
-  // Double check - if the limit switch is ever hit, always stop the platform
+  // If the limit switch is hit, stop the platform, unless
+  // only just started moving away from the limit switch
   if 
-  ((
-    (digitalRead(ZERO_SWITCH) == LOW) &&   // Limit switch hit
-    (_stepper_target < MAX_RAIL_POSITION) &&               // We're not aiming for it
-    (millis()-_move_start > 250) &&        // Current move has been in progress for a while (i.e. plenty of time to have moved off the limit switch)
-    (_state != BarBot::FAULT)              // We've not already faulted.
-  ) ||
-  ( 
+  (
     (digitalRead(ZERO_SWITCH) == LOW) &&
-    (_stepper->distanceToGo() > 15) &&
-    (_state != BarBot::FAULT) &&
-    (millis()-_move_start > 250) 
-  ))
+    (
+      (_stepper->targetPosition() > _stepper->currentPosition()) || // trying to move towards/beyond the limit switch, or
+      (millis()-_move_start > 250)                                  // move has been in progress long enough to have moved off limit switch
+    )
+  )
   {
-    debug("Error: limit switch unexpectedly hit!");
-    set_state(BarBot::FAULT);
+    limit_switch_hit = true;
+    
+    // If we're either zeroing (target=RESET_POSITION), or moving to the end of the rail, reset the home position
+    if ((_stepper_target == RESET_POSITION) || ((_stepper_target==MAX_RAIL_POSITION) && (_stepper->distanceToGo() < 100)))
+    {
+      _stepper->setCurrentPosition(MAX_RAIL_POSITION);
+      _stepper->stop();
+      _stepper->disableOutputs();
+    } else
+    {
+      _stepper->stop();
+      _stepper->disableOutputs();
+      if (_state != BarBot::FAULT)
+      {
+        debug("Error: limit switch unexpectedly hit!");
+        set_state(BarBot::FAULT);
+      }
+    }
   }
-  
+
   _stepper->run();
   
   // Look for Emergency stop button being pressed
@@ -290,23 +303,20 @@ bool BarBot::loop()
       case ZERO:
         if (digitalRead(ZERO_SWITCH) == LOW)
         {
-          done = true;
           _stepper->stop();
+          _stepper->disableOutputs();
           _stepper->setCurrentPosition(MAX_RAIL_POSITION);
-          // _stepper->disableOutputs();
-          _stepper->setMaxSpeed(SPEED_NORMAL);
+          done = true;
         } 
         else if (_stepper->distanceToGo() == 0)
         {
           debug("FAULT: distanceToGo=0 whilst zeroing!");
           set_state(BarBot::FAULT);
-          _stepper->setMaxSpeed(SPEED_NORMAL);
         }
         else if (millis()-_move_start > MAX_MOVE_TIME)
         {
           debug("FAULT: ZERO timeout");
           set_state(BarBot::FAULT);
-          _stepper->setMaxSpeed(SPEED_NORMAL);
         }
         break;
     }
@@ -336,9 +346,8 @@ void BarBot::set_state(barbot_state new_state)
 
     // Stop platform
     _stepper->stop();
-
     _stepper->run();
-    
+
     // Stop all dispensers
     for (int ix=1; ix < DISPENSER_COUNT; ix++)
       if (_dispeners[ix] != NULL)
@@ -356,15 +365,29 @@ void BarBot::set_state(barbot_state new_state)
   {
     debug("ESTOP ACTIVE");
     return;
-  }   
+  }
   
   _state = new_state;  
 }
 
 void BarBot::move_to(long pos)
 {
+  move_to(pos, false);
+}
+
+void BarBot::move_to(long pos, bool force)
+{
+  // Sanity check - if emergency stop pressed, don't start moving
+  if (digitalRead(ESTOP_PIN) == HIGH)
+  {
+    _stepper->stop();
+    _stepper->disableOutputs();
+    debug("move: fail - ESTOP");
+    return;
+  }
+  
   char buf[30]="";
-  if (pos > MAX_RAIL_POSITION)
+  if (!force && (pos > MAX_RAIL_POSITION))
   {
     pos = MAX_RAIL_POSITION;
     debug("Excessive rail position");

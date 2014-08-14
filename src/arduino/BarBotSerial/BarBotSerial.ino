@@ -114,9 +114,11 @@ void process_message(char *msg)
       break;
       
     case 'Z':  // Zero
-      bb->instructions_clear();
+      Serial.println(F("Zero ins"));
+      //bb->instructions_clear();
       bb->instruction_add(BarBot::ZERO, 0, 0);  
-      bb->go();
+      //bb->go();
+      break;
      
     default:
       Serial.println("Unexpected instruction!");
