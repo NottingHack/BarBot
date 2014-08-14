@@ -572,8 +572,10 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
       cmdlist[0] = "R"
       
     case "zero":
-      cmdlist[0] = "Z"
-      
+      cmdlist[0] = "C"               // Clear current instructions
+      cmdlist = append(cmdlist, "Z") // Zero
+      cmdlist = append(cmdlist, "G") // Go
+
     default:
       sendmsg = false
   }
