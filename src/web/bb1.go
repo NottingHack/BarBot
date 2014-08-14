@@ -3,6 +3,7 @@ package main
 
 import (
   "fmt"
+  "regexp"
   "os"
   "html/template"
   "net/http"
@@ -170,10 +171,13 @@ func getReceipes(db *sql.DB) ([]Recipe) {
   for rows.Next() {
     var recipe Recipe
     rows.Scan(&recipe.Id, &recipe.Name, &recipe.Description, &recipe.GlassName)
-	if _, err := os.Stat(recipe.ImageName + ".jpg"); os.IsNotExist(err) {
-		recipe.ImageName = "0_generic_" + strings.ToLower(recipe.GlassName)
+	re := regexp.MustCompile("[^a-zA-Z_ ]")
+	imageFile := strings.Replace(strings.ToLower(re.ReplaceAllString(recipe.Name, "")) + ".jpg", " ", "_", -1)
+	if _, err := os.Stat("static/images/receipes/" + imageFile); os.IsNotExist(err) {
+		fmt.Printf("could not find image file \"%s\"\n", imageFile)
+		recipe.ImageName = "0_generic_" + strings.ToLower(recipe.GlassName) + ".jpg"
 	} else {
-		recipe.ImageName = strings.Replace(strings.ToLower(recipe.Name), " ", "_", -1)
+		recipe.ImageName = imageFile
 	}
     recipes = append(recipes, recipe)
   }
