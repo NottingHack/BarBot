@@ -4,9 +4,13 @@
 .mode column
 .width 6 32 128
 
-SELECT 		r.id, r.name, r.description
-FROM 		recipe r 
-WHERE 		r.id NOT IN (
+SELECT 		r.id, r.name, r.description, sum(not vegan), sum(alcoholic)
+FROM 		recipe r,
+			recipe_ingredient ri,
+			ingredient i
+WHERE 		r.id = ri.recipe_id
+AND			i.id = ri.ingredient_id
+AND			r.id NOT IN (
 	-- sub-select lists IDs of recipes which have missing ingredients
 	SELECT 		r.id
 	FROM 		recipe_ingredient ri, 
@@ -19,5 +23,6 @@ WHERE 		r.id NOT IN (
 		FROM	dispenser d
 		WHERE	d.ingredient_id = i.id
 	)
-);
+)
+GROUP BY	r.id, r.name, r.description ;
 

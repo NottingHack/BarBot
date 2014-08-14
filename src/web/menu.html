@@ -17,8 +17,8 @@
       {{with .Recipes}}
         {{range .}}
           <tr>
-            <td style="width: 100px;"><a href="{{.Id}}"><img src="/static/images/receipes/{{.ImageName}}" class="img-rounded" width="100px" alt="{{.Name}}"></a></td> 
-            <td><h3>{{.Name}}</h3><p>{{.Description}}</p></td>
+            <td style="width: 100px;"><a href="{{.Id}}"><img src="/{{.ImageName}}" class="img-rounded" width="100px" alt="{{.Name}}"></a></td> 
+            <td><h3>{{.Name}}</h3><p>{{.Description}}</p><p>{{.Flags}}</p></td>
           </tr>
         {{end}}
       {{end}}
