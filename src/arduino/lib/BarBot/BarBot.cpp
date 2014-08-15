@@ -28,9 +28,9 @@ BarBot::BarBot()
       case 14:  _dispeners[ix] = new CDasher(24, 25);  break; // Dasher1
       case 15:  _dispeners[ix] = new CDasher(26, 27);  break; // Dasher2
         
-      case 16:  _dispeners[ix] = new CSyringe(5,6);    break;  // Syringe
+      case 17:  _dispeners[ix] = new CSyringe(5,6);    break;  // Syringe
         
-      case 17: _dispeners[ix] = new CConveyor(38, 39); break;  // Conveyor
+      case 16: _dispeners[ix] = new CConveyor(38, 39); break;  // Conveyor
         
       case 18: _dispeners[ix] = new CSlice(34);        break;  // Slice dispenser
         
@@ -195,6 +195,7 @@ bool BarBot::loop()
   bool limit_switch_hit = false;
   
   _stepper->run();
+  glass_present();
     
   for (int ix=1; ix < DISPENSER_COUNT; ix++)
     if (_dispeners[ix] != NULL)
@@ -406,23 +407,35 @@ BarBot::barbot_state BarBot::get_state()
 }
    
 bool BarBot::glass_present()
-{
-  return true;
+{  
+  static uint8_t delay;
+  static int last_state;
+  static int glass_state;
+  static unsigned long long last_state_change;
+  int current_state;
   
-  
+  if (last_state_change==0)
+    glass_state = digitalRead(GLASS_SENSE_PIN);
 
-  if (digitalRead(GLASS_SENSE_PIN) == LOW)
+  if (delay++ != 0)
+    return glass_state;
+  
+  current_state = digitalRead(GLASS_SENSE_PIN);
+
+  if (current_state != last_state)
+    last_state_change = millis();
+
+  if ((millis() - last_state_change) > 5) 
   {
-    return false;
+    if (current_state != glass_state)
+      glass_state = current_state;
   }
-  else
-  {
-    return true;
-  }
+
+  last_state = current_state;
+  return (glass_state==HIGH ? true : false);
 }
-   
-   void debug(char *msg)
+
+void debug(char *msg)
 {
   Serial.println(msg);
 }
-

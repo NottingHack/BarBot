@@ -75,7 +75,7 @@ void process_message(char *msg)
   }
   
   state = bb->get_state();
-  if (state == BarBot::RUNNING)
+  if ((state == BarBot::RUNNING) && (instruction != 'R'))
   {
     Serial.println("Error - barbot is busy");
     return;

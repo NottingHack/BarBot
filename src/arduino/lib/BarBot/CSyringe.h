@@ -1,7 +1,8 @@
 #ifndef CSYRINGE_H
 #define CSYRINGE_H
 
-#define SYRINGE_SUCK_TIME 100     // After dispensing, suck for this many milliseconds
+#define SYRINGE_SUCK_TIME  100     // After dispensing, suck for this many milliseconds
+#define SYRINGE_DRIP_TIME 5000     // How long to wait after dispensing before being "done"
 
 #include "CSyringe.h"
 #include "CDispenser.h"
@@ -26,6 +27,7 @@ class CSyringe : public CDispenser
     uint8_t _suck_pin;
     uint8_t _squirt_pin;
     bool _squirt_done;
+    bool _drip_wait;
 };
 
 #endif

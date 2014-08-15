@@ -31,6 +31,7 @@ bool CSyringe::dispense(uint16_t qty)
     return false;
 
   _squirt_done = false;
+  _drip_wait = false;
   _state = CSyringe::BUSY;
   _dispense_start = millis();
   _dispense_time = qty;
@@ -46,21 +47,28 @@ bool CSyringe::loop()
   if (_state != CSyringe::BUSY)
     return true;
 
-  if ((!_squirt_done) && (millis()-_dispense_start >= _dispense_time))
+  if (!_drip_wait)
   {
-    _squirt_done = true;
-    analogWrite(_suck_pin,0);
-    analogWrite(_squirt_pin,0);
+    if ((!_squirt_done) && (millis()-_dispense_start >= _dispense_time))
+    {
+      _squirt_done = true;
+      analogWrite(_suck_pin,0);
+      analogWrite(_squirt_pin,0);
 
-    analogWrite(_suck_pin,150);
-    analogWrite(_squirt_pin,0);
-  }
-  if (_squirt_done && (millis()-_dispense_start >= (_dispense_time+SYRINGE_SUCK_TIME)))
+      analogWrite(_suck_pin,150);
+      analogWrite(_squirt_pin,0);
+    } 
+    if (_squirt_done && (millis()-_dispense_start >= (_dispense_time+SYRINGE_SUCK_TIME)))
+    {
+      _last_used = millis();
+      analogWrite(_suck_pin,0);
+      analogWrite(_squirt_pin,0);
+      _drip_wait = true;
+    }
+  } else
   {
-    _last_used = millis();
-    analogWrite(_suck_pin,0);
-    analogWrite(_squirt_pin,0);
-    _state = CSyringe::IDLE;
+    if (millis()-_dispense_start > (_dispense_time+SYRINGE_SUCK_TIME+SYRINGE_DRIP_TIME))
+      _state = CSyringe::IDLE;
   }
 
   return true;
