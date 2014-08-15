@@ -2,7 +2,7 @@
 // Nottinghack Barbot Platform
 // Ultrasonic glass detection and Neopixel illumination
 // ATtiny85 (Needs 8 MHz clock for Neopixel library)
-// V0.3 - Added diagnostics mode and over-ride, updated glass detetection range to better suit cocktail glass
+// V0.4 - Diagnostics mode check at at start up removed, amber / green cycles reduced, glass removal check now more responsive
 
 // NeoPixel ring
 #include <Adafruit_NeoPixel.h>
@@ -19,17 +19,15 @@
 // Glass present output
 #define GP_PIN 0
 
-// Mode input - if low at power on then enters diagnostic mode, if low during normal operation then over-rides the ultrasonic sensor
-#define MODE_PIN 2
+// Serial RX pin
+#define RX_PIN 2
 
-typedef enum {RED,AMBER,GREEN,READY} glassState_t;
+typedef enum {RED,AMBER,GREEN,READY} 
+glassState_t;
 glassState_t glassState=RED;
 
-typedef enum {NORMAL,DIAGNOSTIC} mode_t;
-mode_t mode=NORMAL;
-
-long timeOut;
-#define TIMEOUT 2500
+int LED_cycles;
+#define NUM_CYCLES 2
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(24,NEO_PIN,NEO_GRB+NEO_KHZ800);
 
@@ -38,15 +36,12 @@ void setup()
   pinMode(TRIG_PIN,OUTPUT);
   pinMode(ECHO_PIN,INPUT);
   pinMode(GP_PIN,OUTPUT);
-  pinMode(MODE_PIN,INPUT_PULLUP);
+  pinMode(RX_PIN,INPUT_PULLUP);
 
   digitalWrite(GP_PIN,LOW);
 
   strip.begin();
   strip.show();
-
-  if(digitalRead(MODE_PIN)==LOW) 
-    mode=DIAGNOSTIC;
 }
 
 void loop() 
@@ -54,89 +49,81 @@ void loop()
   int d=readDistance();
   boolean glassPresent=(d>=MIN_GLASS_CM && d<=MAX_GLASS_CM);
 
-  if(mode==DIAGNOSTIC)
-    showDistance(d);
-  else
+  switch(glassState)
   {
-    if(digitalRead(MODE_PIN)==LOW)   
-      glassPresent=1;             
-    
-    switch(glassState)
+  case RED:
+    if(glassPresent)
     {
-      case RED:
-        if(glassPresent)
-        {
-          glassState=AMBER;
-          timeOut=millis()+TIMEOUT;
-        } 
-        else
-        {
-          colorWipe(strip.Color(255,0,0),10); // red
-          colorWipe(strip.Color(0,0,0),10);   // blank
-        }
-        break;
-
-      case AMBER:
-        if(glassPresent)
-        {
-          if(millis()>timeOut)
-          {
-            glassState=GREEN;
-            timeOut=millis()+TIMEOUT;
-          }
-          else
-          {
-            colorWipe(strip.Color(255,80,0),10); // amber
-            colorWipe(strip.Color(0,0,0),10);    // blank
-          }
-        }
-        else
-        {
-          digitalWrite(GP_PIN,LOW);
-          glassState=RED;        
-        }
-        break;
-
-      case GREEN:
-        if(glassPresent)
-        {
-          if(millis()>timeOut)
-          {
-            glassState=READY;
-            digitalWrite(GP_PIN,HIGH);
-          }
-          else
-          {
-            colorWipe(strip.Color(0,255,0),10); // green
-            colorWipe(strip.Color(0,0,0),10);   // blank
-          }
-        }
-        else
-        {
-          digitalWrite(GP_PIN,LOW);
-          glassState=RED;        
-        }
-        break;
-
-      case READY:
-        if(glassPresent)
-        {
-          rainbowCycle(10);
-        }
-        else
-        {
-          digitalWrite(GP_PIN,LOW);
-          glassState=RED;        
-        }
-        break;
-
-      default:
-        digitalWrite(GP_PIN,LOW);
-        glassState=RED;
+      glassState=AMBER;
+      LED_cycles=NUM_CYCLES;
+    } 
+    else
+    {
+      colorWipe(strip.Color(255,0,0),10); // red
+      colorWipe(strip.Color(0,0,0),10);   // blank
     }
-  }
+    break;
 
-  delay(100);
+  case AMBER:
+    if(glassPresent)
+    {
+      if(LED_cycles<=0)
+      {
+        glassState=GREEN;
+        LED_cycles=NUM_CYCLES;
+      }
+      else
+      {
+        colorWipe(strip.Color(255,80,0),10); // amber
+        colorWipe(strip.Color(0,0,0),10);    // blank
+        LED_cycles--;
+      }
+    }
+    else
+    {
+      digitalWrite(GP_PIN,LOW);
+      glassState=RED;        
+    }
+    break;
+
+  case GREEN:
+    if(glassPresent)
+    {
+      if(LED_cycles<=0)
+      {
+        glassState=READY;
+        digitalWrite(GP_PIN,HIGH);
+      }
+      else
+      {
+        colorWipe(strip.Color(0,255,0),10); // green
+        colorWipe(strip.Color(0,0,0),10);   // blank
+        LED_cycles--;
+      }
+    }
+    else
+    {
+      digitalWrite(GP_PIN,LOW);
+      glassState=RED;        
+    }
+    break;
+
+  case READY:
+    if(glassPresent)
+    {
+      rainbowCycle(10);
+    }
+    else
+    {
+      digitalWrite(GP_PIN,LOW);
+      glassState=RED;        
+    }
+    break;
+
+  default:
+    digitalWrite(GP_PIN,LOW);
+    glassState=RED;
+  }
 }
 
 void showDistance(int d)
@@ -162,17 +149,18 @@ void colorWipe(uint32_t c, uint8_t wait)
 
 void rainbowCycle(uint8_t wait) 
 {
-  uint16_t i, j;
+  static uint16_t j;
+  uint16_t i;
+  
+  j++;
+  if(j>255) j=0;
 
-  for(j=0; j<256; j++) 
+  for(i=0; i< strip.numPixels(); i++) 
   {
-    for(i=0; i< strip.numPixels(); i++) 
-    {
       strip.setPixelColor(i, Wheel(((i * 256 / strip.numPixels()) + j) & 255));
-    }
-    strip.show();
-    delay(wait);
   }
+  strip.show();
+  delay(wait);
 }
 
 uint32_t Wheel(byte WheelPos) 
@@ -210,6 +198,8 @@ int readDistance()
 
   return d;
 } 
+
+
 
 
 
