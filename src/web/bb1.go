@@ -193,7 +193,6 @@ func getReceipes(db *sql.DB) ([]Recipe) {
             and         r2.id = r.id
           )`)
   if err != nil {
-    // TODO
     panic(fmt.Sprintf("%v", err))
   }
   defer rows.Close()
@@ -1192,17 +1191,23 @@ func getCommandList(drink_order_id int, recipe_id int) ([]string, int) {
     commandList = append(commandList, fmt.Sprintf("M %d", rail_position))
 
     // Dispense
-    if dispenser_type == DISPENSER_MIXER || dispenser_type == DISPENSER_SYRINGE {
-      // For the mixer and syringe, send qty as the number of milliseconds to dispense for
-      commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, qty * dispenser_param))
-    } else {
-      for qty > 0 {
-        qty--
-        commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, dispenser_param))
-      }
+    switch dispenser_type {
+      case DISPENSER_MIXER, DISPENSER_SYRINGE: 
+        // For the mixer and syringe, send qty as the number of milliseconds to dispense for
+        commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, qty * dispenser_param))
+
+      case DISPENSER_DASHER:
+        // For dashers, the paramter is the number of dashes to despense
+        commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, qty))
+
+      default:
+        for qty > 0 {
+          qty--
+          commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, dispenser_param))
+        }
     }
   }
-  
+
   // move to home position when done
   commandList = append(commandList, fmt.Sprintf("M 7080")) // TODO: move to home command.
   
