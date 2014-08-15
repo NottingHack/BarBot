@@ -33,11 +33,11 @@ bool CDasher::dispense(uint16_t qty)
     return false;
 
   _state = CDasher::BUSY;
-  _qty = qty+1;
+  _qty = (qty*2); // Looking for 2 transitions per dispense
 
   _dispense_start = millis();
   digitalWrite(_pin_driver, HIGH);
-  
+
   return true;
 };
 
@@ -47,7 +47,7 @@ bool CDasher::loop()
 
   if (_state != CDasher::BUSY)
     return true;
-  
+
   // Count number of dashes by looking for pulses on cam line
   uint8_t cam_val = digitalRead(_pin_cam);
   if (cam_val != last_cam_val)
@@ -55,14 +55,14 @@ bool CDasher::loop()
     _qty--;
     last_cam_val = cam_val;
   }
-  
+
   // If we've dispensed the required number of dashes, then stop. 
-  if (_qty <= 0)
+  if ((_qty <= 0) && (cam_val == LOW))
   {
     digitalWrite(_pin_driver, LOW);
     _state = CDasher::IDLE;
     return false;
-  }    
+  }
 
   if (millis()-_dispense_start > DASHER_TIMEOUT) 
   {
