@@ -148,7 +148,7 @@ func getReceipes(db *sql.DB) ([]Recipe) {
   var recipes []Recipe
 
   // Load drinks - only show those that can currently be made
-  rows, err := db.Query(`   SELECT       r.id, r.name, r.description, gt.name, SUM(NOT i.vegan) > 0, SUM(i.alcoholic) > 0
+  rows, err := db.Query(`   SELECT       r.id, r.name, r.description, gt.name, NOT(SUM(NOT i.vegan) > 0), SUM(i.alcoholic) > 0
 							FROM         recipe r,
 										 glass_type gt,
 										 ingredient i,
