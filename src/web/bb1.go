@@ -30,6 +30,8 @@ type Recipe struct {
   Vegan bool
   Alcoholic bool
   Flags string
+  VeganIcon string
+  AlcoholIcon string
 }
 
 type DrinksMenu struct {
@@ -48,6 +50,7 @@ type MenuItemIngredient struct {
 type MenuItem struct {
   Id          int
   DrinkName   string
+  Description string
   Direct      bool
   Ingredients []MenuItemIngredient
 }
@@ -156,42 +159,29 @@ func getReceipes(db *sql.DB) ([]Recipe) {
   var recipes []Recipe
 
   // Load drinks - only show those that can currently be made
-  rows, err := db.Query(`
-          select
-            r.id,
-            r.name,
-            r.description,
-            gt.name,
-            not exists
-            (
-              select null
-              from recipe_ingredient ri2
-              inner join ingredient i2 on ri2.ingredient_id = i2.id
-              where ri2.recipe_id = r.id
-                and i2.vegan = 0
-            ) as vegan,
-            exists
-            (
-              select null
-              from recipe_ingredient ri2
-              inner join ingredient i2 on ri2.ingredient_id = i2.id
-              where ri2.recipe_id = r.id
-                and i2.alcoholic = 1
-            ) as alcoholic
-          from recipe r
-          inner join glass_type gt on r.glass_type_id = gt.id
-          and not exists 
-          (
-            select      null
-            from        recipe r2
-            inner join  recipe_ingredient ri on r2.id = ri.recipe_id
-            inner join  ingredient i on i.id = ri.ingredient_id
-            inner join  dispenser_type dt on dt.id = i.dispenser_type_id
-            left outer  join dispenser d on cast(d.ingredient_id as integer) = cast(ri.ingredient_id as integer)
-            where       d.id is null 
-            and         dt.manual = 0
-            and         r2.id = r.id
-          )`)
+  rows, err := db.Query(`   SELECT          r.id, r.name, r.description, gt.name, NOT(SUM(NOT(i.vegan)) > 0), SUM(i.alcoholic) > 0
+							FROM            recipe r,
+											recipe_ingredient ri,
+											ingredient i,
+											glass_type gt 
+							WHERE           r.id NOT IN (
+									-- sub-select lists IDs of recipes which have missing ingredients
+									SELECT          r.id
+									FROM            recipe_ingredient ri, 
+													recipe r, 
+													ingredient i 
+									WHERE           r.id = ri.recipe_id
+									AND             ri.ingredient_id = i.id
+									AND             NOT EXISTS (
+											SELECT  1
+											FROM    dispenser d
+											WHERE   d.ingredient_id = i.id
+									)
+							)
+							AND             ri.ingredient_id = i.id
+							AND             ri.recipe_id = r.id
+							AND             r.glass_type_id = gt.id
+							GROUP BY        r.name, r.name, r.description, gt.name`)
   if err != nil {
     // TODO
     panic(fmt.Sprintf("%v", err))
@@ -211,13 +201,17 @@ func getReceipes(db *sql.DB) ([]Recipe) {
 	}
 	recipe.Flags = ""
 	if recipe.Vegan {
-		recipe.Flags += "Vegan "
-	}
-	if recipe.Alcoholic {
-		recipe.Flags += "Alcohoic"
+		recipe.VeganIcon = "/static/images/vegan.png"
 	} else {
-		recipe.Flags += "Non-Alcoholic"
+		recipe.VeganIcon = "/static/images/animal-product.png"
 	}
+
+	if recipe.Alcoholic {
+		recipe.AlcoholIcon = "/static/images/alcohol.png"
+	} else {
+		recipe.AlcoholIcon = "/static/images/non-alcoholic.png"
+	}
+
     recipes = append(recipes, recipe)
   }
   rows.Close()
@@ -231,8 +225,8 @@ func showMenuItem(db *sql.DB, w http.ResponseWriter, r *http.Request) {
       drink_id := r.URL.Path[len("/menu/"):]
 
       // Get basic receipe information
-      row := db.QueryRow("select id, name from recipe where id = ?", drink_id)
-      err := row.Scan(&menuitem.Id, &menuitem.DrinkName)
+      row := db.QueryRow("select id, name, description from recipe where id = ?", drink_id)
+      err := row.Scan(&menuitem.Id, &menuitem.DrinkName, &menuitem.Description)
       if err == sql.ErrNoRows {
         http.NotFound(w, r)
         return
