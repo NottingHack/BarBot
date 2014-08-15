@@ -2,6 +2,15 @@
 
 BarBot::BarBot()
 {
+  // Dasher neopixel rings
+  _dasher_neo = new Adafruit_NeoPixel(72,NEO0_PIN,NEO_GRB+NEO_KHZ800);
+  _dasher_neo->begin();
+  _dasher_neo->show(); // Initialize all pixels to 'off'
+  memset(_neo_buf, 0, sizeof(_neo_buf));
+  color_wipe(_dasher_neo->Color(100,100,100)); // white
+  refresh_neo();
+
+  
   memset(_instructions, NOP, sizeof(_instructions));
   _instruction_count = 0;
   
@@ -10,36 +19,36 @@ BarBot::BarBot()
   {
     switch(ix)
     {
-      case 1:  _dispeners[ix] = new COptic(40, 65, 10); break; // Optic0
-      case 2:  _dispeners[ix] = new COptic(42, 10, 65); break; // Optic1
-      case 3:  _dispeners[ix] = new COptic(44, 65, 10); break; // Optic2
-      case 4:  _dispeners[ix] = new COptic(46, 10, 65); break; // Optic3
-      case 5:  _dispeners[ix] = new COptic(48, 65, 10); break; // Optic4
-      case 6:  _dispeners[ix] = new COptic(50, 65, 10); break; // Optic5
+      case DISPENSER_OPTIC0:  _dispeners[ix]   = new COptic(40, 65, 10); break; // Optic0
+      case DISPENSER_OPTIC1:  _dispeners[ix]   = new COptic(42, 10, 65); break; // Optic1
+      case DISPENSER_OPTIC2:  _dispeners[ix]   = new COptic(44, 65, 10); break; // Optic2
+      case DISPENSER_OPTIC3:  _dispeners[ix]   = new COptic(46, 10, 65); break; // Optic3
+      case DISPENSER_OPTIC4:  _dispeners[ix]   = new COptic(48, 65, 10); break; // Optic4
+      case DISPENSER_OPTIC5:  _dispeners[ix]   = new COptic(50, 65, 10); break; // Optic5
 
-      case 7:  _dispeners[ix] = new CMixer(41); break; // Preasure0
-      case 8:  _dispeners[ix] = new CMixer(43); break; // Preasure1
-      case 9:  _dispeners[ix] = new CMixer(45); break; // Preasure2 
-      case 10: _dispeners[ix] = new CMixer(47); break; // Preasure3
-      case 11: _dispeners[ix] = new CMixer(49); break; // Preasure4
-      case 12: _dispeners[ix] = new CMixer(51); break; // Preasure5
+      case DISPENSER_PREASURE0: _dispeners[ix] = new CMixer(41); break; // Preasure0
+      case DISPENSER_PREASURE1: _dispeners[ix] = new CMixer(43); break; // Preasure1
+      case DISPENSER_PREASURE2: _dispeners[ix] = new CMixer(45); break; // Preasure2 
+      case DISPENSER_PREASURE3: _dispeners[ix] = new CMixer(47); break; // Preasure3
+      case DISPENSER_PREASURE4: _dispeners[ix] = new CMixer(49); break; // Preasure4
+      case DISPENSER_PREASURE5: _dispeners[ix] = new CMixer(51); break; // Preasure5
         
-      case 13:  _dispeners[ix] = new CDasher(22, 23);  break; // Dasher0
-      case 14:  _dispeners[ix] = new CDasher(24, 25);  break; // Dasher1
-      case 15:  _dispeners[ix] = new CDasher(26, 27);  break; // Dasher2
+      case DISPENSER_DASHER0:  _dispeners[ix]  = new CDasher(22, 23);  break; // Dasher0
+      case DISPENSER_DASHER1:  _dispeners[ix]  = new CDasher(24, 25);  break; // Dasher1
+      case DISPENSER_DASHER2:  _dispeners[ix]  = new CDasher(26, 27);  break; // Dasher2
         
-      case 17:  _dispeners[ix] = new CSyringe(5,6);    break;  // Syringe
+      case DISPENSER_SYRINGE:  _dispeners[ix]  = new CSyringe(5,6);    break;  // Syringe
         
-      case 16: _dispeners[ix] = new CConveyor(38, 39); break;  // Conveyor
+      case DISPENSER_CONVEYOR: _dispeners[ix]  = new CConveyor(38, 39); break;  // Conveyor
         
-      case 18: _dispeners[ix] = new CSlice(34);        break;  // Slice dispenser
+      case DISPENSER_SLICE: _dispeners[ix]     = new CSlice(34);        break;  // Slice dispenser
         
-      case 19: _dispeners[ix] = new CStirrer(36);      break;  // Stirrer
+      case DISPENSER_STIRRER: _dispeners[ix]   = new CStirrer(36);      break;  // Stirrer
         
-      case 20: _dispeners[ix] = new CUmbrella(32);     break;  // Umbrella
+      case DISPENSER_UMBRELLA: _dispeners[ix]  = new CUmbrella(32);     break;  // Umbrella
     }
   }
-  
+
   // Stepper for platform movement
   _stepper = new AccelStepper(AccelStepper::DRIVER);
   _stepper->setMaxSpeed(SPEED_NORMAL);
@@ -47,17 +56,32 @@ BarBot::BarBot()
   _stepper->setPinsInverted(false,false,false,false,true);
   _stepper->setEnablePin(4);
   _stepper->disableOutputs();
+  if (digitalRead(ZERO_SWITCH) == LOW)
+  {
+    _stepper_target = MAX_RAIL_POSITION;
+    _stepper->setCurrentPosition(MAX_RAIL_POSITION);
+  }
+  else
+  {
+    _stepper->setCurrentPosition(0);
+    _stepper_target = 0;
+  }
+  
   _stepper->run();
   
-  set_state(BarBot::IDLE);
   _current_instruction = 0;
-  _stepper_target = 0;
   
   pinMode(ZERO_SWITCH    , INPUT_PULLUP);
   pinMode(ESTOP_PIN      , INPUT_PULLUP);
   pinMode(GLASS_SENSE_PIN, INPUT_PULLUP);
   
+  if (digitalRead(ESTOP_PIN) == LOW)
+    set_state(BarBot::IDLE);  // estop not pressed
+  else
+    set_state(BarBot::FAULT); // estop pressed
+
   //digitalWrite(14, LOW);
+
 }
 
 BarBot::~BarBot()
@@ -79,7 +103,7 @@ bool BarBot::instruction_add(instruction_type instruction, uint16_t param1, uint
 
   // For DISPENSE instructions, param1 is the dispenser_id - ensure this is valid.
   if ((instruction == BarBot::DISPENSE) && (param1 >= DISPENSER_COUNT))
-    return false;    
+    return false;
   
   if (_instruction_count < MAX_INSTRUCTIONS)
   {
@@ -273,7 +297,7 @@ bool BarBot::loop()
       case NOP:
         done = true;
         break;
-        
+
       case MOVE:
         if (_stepper->distanceToGo() == 0)
         {
@@ -286,12 +310,24 @@ bool BarBot::loop()
           set_state(BarBot::FAULT);
         } 
         break;
-        
+
       case DISPENSE:
         if (_dispeners[cmd->param1] != NULL)
         {
+          // If dispening from a dasher, animate the neopixel ring
+          if (cmd->param1 == DISPENSER_DASHER0)
+            dasher_wheel(NEO_DASHER0);
+          else if (cmd->param1 == DISPENSER_DASHER1)
+            dasher_wheel(NEO_DASHER1);
+          else if (cmd->param1 == DISPENSER_DASHER2)
+            dasher_wheel(NEO_DASHER2);
+
           if (_dispeners[cmd->param1]->get_status() == CDispenser::IDLE)
+          {
+            if (_dispeners[cmd->param1]->get_dispener_type() == CDispenser::DISPENSER_DASHER)
+              set_neo_colour(_state); // restore previous colour
             done = true;
+          }
         } else
           done = true;
         break;
@@ -341,6 +377,8 @@ bool BarBot::loop()
 
 void BarBot::set_state(barbot_state new_state)
 {  
+  static bool first_run = true;
+  
   if (new_state == BarBot::FAULT)
   {
     debug("FAULT.");
@@ -368,7 +406,14 @@ void BarBot::set_state(barbot_state new_state)
     return;
   }
   
-  _state = new_state;  
+  if ((_state != new_state) || first_run)
+  {
+    _state = new_state;
+    first_run = false;
+    
+    set_neo_colour(new_state);
+  }
+
 }
 
 void BarBot::move_to(long pos)
@@ -408,6 +453,7 @@ BarBot::barbot_state BarBot::get_state()
    
 bool BarBot::glass_present()
 {  
+  return true;
   static uint8_t delay;
   static int last_state;
   static int glass_state;
@@ -425,7 +471,7 @@ bool BarBot::glass_present()
   if (current_state != last_state)
     last_state_change = millis();
 
-  if ((millis() - last_state_change) > 5) 
+  if ((millis() - last_state_change) > 100) 
   {
     if (current_state != glass_state)
       glass_state = current_state;
@@ -434,6 +480,69 @@ bool BarBot::glass_present()
   last_state = current_state;
   return (glass_state==HIGH ? true : false);
 }
+
+void BarBot::color_wipe(uint32_t c)
+{
+  color_wipe(c, NEO_DASHER0);
+  color_wipe(c, NEO_DASHER1);
+  color_wipe(c, NEO_DASHER2);
+}
+
+void BarBot::color_wipe(uint32_t c, uint8_t dasher)
+{
+  for(uint16_t i=dasher; (i<_dasher_neo->numPixels()) && (i < dasher+24); i++) 
+    _neo_buf[i] = c;
+}
+
+void BarBot::dasher_wheel(uint8_t dasher)
+{
+  static uint8_t pos = 0;
+  static unsigned long last_update;
+  
+  if (dasher+24 > sizeof(_neo_buf))
+    return;
+  
+  if (millis()-last_update > 10)
+  {
+    _neo_buf[pos+dasher] = _dasher_neo->Color(0,100,0);     // Green
+    pos = (pos+1)%24;
+    _neo_buf[pos+dasher] = _dasher_neo->Color(255,255,255); // White
+    refresh_neo();
+    last_update = millis();
+  }
+}
+
+void BarBot::set_neo_colour(barbot_state state)
+{
+  // Change dasher new pixel rings colour
+  switch (state)
+  {
+    case BarBot::IDLE:
+      color_wipe(_dasher_neo->Color(100,100,100)); // white
+      break;
+
+    case BarBot::WAITING:
+      color_wipe(_dasher_neo->Color(100,100,0));  // yellow
+      break;
+
+    case BarBot::RUNNING:
+      color_wipe(_dasher_neo->Color(0,100,0));    // green
+      break;
+
+    case BarBot::FAULT:
+      color_wipe(_dasher_neo->Color(100,0,0));    // red
+      break;
+  }
+  refresh_neo();
+}
+
+void BarBot::refresh_neo()
+{
+  for(uint16_t i=0; ((i <_dasher_neo->numPixels()) && (i < sizeof(_neo_buf))); i++)
+    _dasher_neo->setPixelColor(i, _neo_buf[i]);
+  _dasher_neo->show();
+}
+
 
 void debug(char *msg)
 {

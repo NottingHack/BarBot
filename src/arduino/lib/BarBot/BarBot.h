@@ -14,11 +14,13 @@
 #include "CDasher.h"
 #include "CSyringe.h"
 
+
 #include "Arduino.h"
 #include "AccelStepper.h"
 #include <avr/pgmspace.h>
+#include "Adafruit_NeoPixel.h"
 
-#define MAX_INSTRUCTIONS    100  // Maximum number of instructions that can be stored
+#define MAX_INSTRUCTIONS     100  // Maximum number of instructions that can be stored
 
 #define MAX_MOVE_TIME      19000  // Maximum amount of time moving the platform should take (in ms).
 #define STEPS_PER_CM          48  // Number of steps per CM (platform movement)
@@ -32,8 +34,34 @@
 #define SPEED_ZERO           800  // Speed when zeroing
 #define SPEED_NORMAL        1500  // Normal speed
 #define MAX_ACCEL           3000
-#define GLASS_SENSE_PIN       15 
+#define GLASS_SENSE_PIN       15
+#define NEO0_PIN               7
 
+#define NEO_DASHER0   0
+#define NEO_DASHER1  24
+#define NEO_DASHER2  48
+
+// dispenser_id (needs to match db)
+#define DISPENSER_OPTIC0     1
+#define DISPENSER_OPTIC1     2
+#define DISPENSER_OPTIC2     3
+#define DISPENSER_OPTIC3     4
+#define DISPENSER_OPTIC4     5
+#define DISPENSER_OPTIC5     6
+#define DISPENSER_PREASURE0  7
+#define DISPENSER_PREASURE1  8
+#define DISPENSER_PREASURE2  9
+#define DISPENSER_PREASURE3 10
+#define DISPENSER_PREASURE4 11
+#define DISPENSER_PREASURE5 12
+#define DISPENSER_DASHER0   13
+#define DISPENSER_DASHER1   14
+#define DISPENSER_DASHER2   15
+#define DISPENSER_CONVEYOR  16
+#define DISPENSER_SYRINGE   17
+#define DISPENSER_SLICE     18
+#define DISPENSER_STIRRER   19
+#define DISPENSER_UMBRELLA  20
 
 void debug(char *msg);
 
@@ -75,11 +103,17 @@ class BarBot
       uint16_t          param1;
       uint16_t          param2;
     };
-         
+
     bool exec_instruction(uint16_t instruction);
     void move_to(long pos);
     void move_to(long pos, bool force);
     void set_state(barbot_state state);
+    void color_wipe(uint32_t c, uint8_t dasher);
+    void color_wipe(uint32_t c);
+    void refresh_neo();
+    void dasher_wheel(uint8_t dasher);
+    void set_neo_colour(barbot_state state);
+    
     
     barbot_state _state;
     instruction _instructions[MAX_INSTRUCTIONS];
@@ -91,6 +125,8 @@ class BarBot
     long _stepper_target;
     CDispenser *_dispeners[DISPENSER_COUNT];
     bool glass_present();
+    Adafruit_NeoPixel *_dasher_neo;
+    uint32_t _neo_buf[96];
 };
 
 #endif
