@@ -18,7 +18,12 @@
         {{range .}}
           <tr>
             <td style="width: 100px;"><a href="{{.Id}}"><img src="/{{.ImageName}}" class="img-rounded" width="100px" alt="{{.Name}}"></a></td> 
-            <td><h3>{{.Name}}</h3><p>{{.Description}}</p><p>{{.Flags}}</p></td>
+            <td>
+                <h3><a href="{{.Id}}">{{.Name}}</a></h3>
+                <p>{{.Description}}</p>
+                <img src="{{.AlcoholIcon}}">
+                <img src="{{.VeganIcon}}">
+	    </td>
           </tr>
         {{end}}
       {{end}}
