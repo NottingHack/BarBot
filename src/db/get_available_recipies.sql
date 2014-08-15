@@ -1,21 +1,17 @@
 -- Determine which cocktails can be made based on the ingredients
 -- currently configured in the dispenser table
 
-.mode column
-.width 6 32 128
-
-SELECT 		r.id, r.name, r.description, sum(not vegan), sum(alcoholic)
+SELECT 		r.id, r.name, r.description, gt.name, SUM(NOT(i.vegan)) > 0, SUM(i.alcoholic) > 0
 FROM 		recipe r,
 			recipe_ingredient ri,
-			ingredient i
-WHERE 		r.id = ri.recipe_id
-AND			i.id = ri.ingredient_id
-AND			r.id NOT IN (
+			ingredient i,
+			glass_type gt 
+WHERE 		r.id NOT IN (
 	-- sub-select lists IDs of recipes which have missing ingredients
 	SELECT 		r.id
 	FROM 		recipe_ingredient ri, 
-			recipe r, 
-			ingredient i 
+			    recipe r, 
+			    ingredient i 
 	WHERE 		r.id = ri.recipe_id
 	AND 		ri.ingredient_id = i.id
 	AND 		NOT EXISTS (
@@ -24,5 +20,9 @@ AND			r.id NOT IN (
 		WHERE	d.ingredient_id = i.id
 	)
 )
-GROUP BY	r.id, r.name, r.description ;
+AND 		ri.ingredient_id = i.id
+AND 		ri.recipe_id = r.id
+AND			r.glass_type_id = gt.id
+GROUP BY    r.name, r.name, r.description;
+
 
