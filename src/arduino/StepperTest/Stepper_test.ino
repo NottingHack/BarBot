@@ -105,6 +105,8 @@ void setup()
   pinMode(53,INPUT_PULLUP);  // emergency stop switch
   
   Serial.begin(9600);
+
+  Serial3.begin(9600);
 }
 
 void loop()
@@ -350,7 +352,23 @@ void serialEvent()
 
     case 'U':  // emergency stop
     case 'u':
-      Serial.println(digitalRead(53));
+      Serial2.println(digitalRead(53));
+      break;
+
+// Serial to platform
+    case 'V':
+    case 'v':
+      Serial3.print('R');
+      break;
+    
+    case 'W':
+    case 'w':
+      Serial3.print('W');
+      break;
+
+    case 'Z':
+    case 'z':
+      Serial3.print('Z');
       break;
 
     default:
