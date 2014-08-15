@@ -3,7 +3,8 @@
 
 #define MIXER_IDLE_POSITION       140
 #define MIXER_DISPENSE_POSITION    65
-
+#define MIXER_DELAY              1000  // How long to wait after dispensing before being "done"
+#define MIXER_DETTACH_TIME       1000  // how long to wait after dispensing before dettaching
 
 #include "CMixer.h"
 #include "CDispenser.h"
@@ -23,12 +24,15 @@ class CMixer : public CDispenser
      bool             loop();
      dispenser_state  get_status();
      void             stop();
-     uint8_t          _servo_pin;
+
      
   private:
     Servo _servo;
     unsigned long long _dispense_start;
     uint16_t _dispense_time; // how long in ms to dispense for
+    bool _attached;
+    uint8_t  _servo_pin;
+    bool _dispensed;
   
 };
 

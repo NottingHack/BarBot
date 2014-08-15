@@ -11,6 +11,7 @@ CSyringe::CSyringe(uint8_t suck_pin, uint8_t squirt_pin)
   _squirt_pin = squirt_pin;
   analogWrite(_suck_pin,0);
   analogWrite(_squirt_pin,0);
+  _syr_state = READY;
 }
 
 CSyringe::~CSyringe()
@@ -30,9 +31,8 @@ bool CSyringe::dispense(uint16_t qty)
   if (_state != CSyringe::IDLE)
     return false;
 
-  _squirt_done = false;
-  _drip_wait = false;
   _state = CSyringe::BUSY;
+  _syr_state = DISPENSING;
   _dispense_start = millis();
   _dispense_time = qty;
   
@@ -46,29 +46,33 @@ bool CSyringe::loop()
 {
   if (_state != CSyringe::BUSY)
     return true;
-
-  if (!_drip_wait)
+  
+  
+  if ((_syr_state == DISPENSING) && (millis()-_dispense_start >= _dispense_time))
   {
-    if ((!_squirt_done) && (millis()-_dispense_start >= _dispense_time))
-    {
-      _squirt_done = true;
-      analogWrite(_suck_pin,0);
-      analogWrite(_squirt_pin,0);
+    analogWrite(_suck_pin,0);
+    analogWrite(_squirt_pin,0);
+    _syr_state = SUCK_WAIT;
+  }
 
-      analogWrite(_suck_pin,150);
-      analogWrite(_squirt_pin,0);
-    } 
-    if (_squirt_done && (millis()-_dispense_start >= (_dispense_time+SYRINGE_SUCK_TIME)))
-    {
-      _last_used = millis();
-      analogWrite(_suck_pin,0);
-      analogWrite(_squirt_pin,0);
-      _drip_wait = true;
-    }
-  } else
+  else if ((_syr_state == SUCK_WAIT) && (millis()-_dispense_start >= (_dispense_time+SYRINGE_WAIT_TIME)))
   {
-    if (millis()-_dispense_start > (_dispense_time+SYRINGE_SUCK_TIME+SYRINGE_DRIP_TIME))
-      _state = CSyringe::IDLE;
+    analogWrite(_suck_pin,150);
+    analogWrite(_squirt_pin,0);
+    _syr_state = SUCKING;
+  }
+
+  else if ((_syr_state == SUCKING) && (millis()-_dispense_start >= (_dispense_time+SYRINGE_WAIT_TIME+SYRINGE_SUCK_TIME)))
+  {
+    analogWrite(_suck_pin,0);
+    analogWrite(_squirt_pin,0);
+    _syr_state = DRIP_WAIT;
+  }
+
+  else if ((_syr_state == DRIP_WAIT) && (millis()-_dispense_start >= (_dispense_time+SYRINGE_WAIT_TIME+SYRINGE_SUCK_TIME+SYRINGE_DRIP_TIME)))
+  {
+    _state = CSyringe::IDLE;
+    _syr_state = READY;
   }
 
   return true;
