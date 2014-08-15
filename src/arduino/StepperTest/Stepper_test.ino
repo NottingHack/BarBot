@@ -259,12 +259,13 @@ void serialEvent()
     case 'k':
       analogWrite(5,0);
       analogWrite(6,150);
-      delay(200);
+      delay(400);
       analogWrite(5,0);
       analogWrite(6,0);
+      delay(100);
       analogWrite(5,150);
       analogWrite(6,0);
-      delay(100);
+      delay(300);
       analogWrite(5,0);
       analogWrite(6,0);
       break;

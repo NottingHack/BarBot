@@ -118,7 +118,15 @@ type AdminRecipe struct {
   RecIngredients  []AdminRecipeIngr  // Ingrediants in currently selected receipe
 }
 
+type AdminDispenser struct {
+  Id              int
+  Name            string
+  Rail_position   int
+}
 
+type AdminControl struct {
+  Dispensers      []AdminDispenser
+}
 
 const (
   DISPENSER_OPTIC    = 1
@@ -573,6 +581,7 @@ func adminDispenser(w http.ResponseWriter, r *http.Request, param string) {
 
 func adminControl(w http.ResponseWriter, r *http.Request, param string) {
   tmpl, _ := template.ParseFiles("admin_header.html", "admin_control.html", "admin_footer.html")
+  var cmd string
 
   // Open database
   db := getDBConnection()
@@ -580,16 +589,38 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
 
   sendmsg := true
   
+  // Get reguested command from param (e.g. for move/1234, set cmd = move)
+  i := strings.Index(param, "/")
+  if i > 0 {
+    cmd = param[:i]
+  } else {
+    cmd = param
+  }
+  
   cmdlist := make([]string, 1)
   
-  switch (param) {
+  switch (cmd) {
     case "reset":
       cmdlist[0] = "R"
-      
+
     case "zero":
       cmdlist[0] = "C"               // Clear current instructions
       cmdlist = append(cmdlist, "Z") // Zero
       cmdlist = append(cmdlist, "G") // Go
+      
+    case "move":
+      rail_position, err := strconv.Atoi(param[len("move/"):])
+      if err != nil {
+        return
+      }
+      cmdlist[0] = "C"               // Clear current instructions
+      cmdlist = append(cmdlist, fmt.Sprintf("M %d", rail_position)) // Move to rail position nnnn
+      cmdlist = append(cmdlist, "G") // Go
+
+    case "dispense":
+      BarbotSerialChan <- adminControlDispenser(w, r, param)
+      http.Redirect(w, r, "/admin/control/", http.StatusSeeOther)
+      return
 
     default:
       sendmsg = false
@@ -600,11 +631,60 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
     http.Redirect(w, r, "/admin/control/", http.StatusSeeOther)
     return
   }
+  
+  // Get a list of all dispensers
+  sql := `
+    select
+      d.id as dispenser_id,
+      d.name as dispenser_name,
+      d.rail_position
+    from dispenser d 
+    inner join dispenser_type dt on dt.id = d.dispenser_type_id
+    where dt.manual = 0
+    order by d.id
+  `
+  
+  rows, err := db.Query(sql)
+  if err != nil {
+    panic(fmt.Sprintf("%v", err))
+  }
+  defer rows.Close()
+
+  var control AdminControl
+  for rows.Next() {
+    var dispenser AdminDispenser
+
+    rows.Scan(&dispenser.Id, &dispenser.Name, &dispenser.Rail_position)
+    control.Dispensers = append(control.Dispensers, dispenser)
+  }
+  
 
   tmpl.ExecuteTemplate(w, "admin_header" , nil)
-  tmpl.ExecuteTemplate(w, "admin_control", nil)
+  tmpl.ExecuteTemplate(w, "admin_control", control)
   tmpl.ExecuteTemplate(w, "admin_footer" , nil)
   return
+}
+
+// adminControlDispenser returns a set up commands to dispense from the selected dispenser
+func adminControlDispenser(w http.ResponseWriter, r *http.Request, param string) ([]string) {
+  r.ParseForm()
+  
+  dispenser_id, err := strconv.Atoi(r.Form.Get("dispense"))
+  if err != nil {
+    return nil
+  }
+  
+  d_param, err := strconv.Atoi(r.Form.Get(r.Form.Get("dispense")))
+  if err != nil {
+    return nil
+  }
+  
+  commandList := make([]string, 3)
+  commandList[0] = "C"
+  commandList[1] = fmt.Sprintf("D %d %d", dispenser_id, d_param)
+  commandList[2] = "G"
+  
+  return commandList
 }
 
 func adminMenu(w http.ResponseWriter, r *http.Request, param string) {
