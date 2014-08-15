@@ -23,6 +23,7 @@ class CMixer : public CDispenser
      bool             loop();
      dispenser_state  get_status();
      void             stop();
+     uint8_t          _servo_pin;
      
   private:
     Servo _servo;

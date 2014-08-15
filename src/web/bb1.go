@@ -156,28 +156,43 @@ func getReceipes(db *sql.DB) ([]Recipe) {
   var recipes []Recipe
 
   // Load drinks - only show those that can currently be made
-  rows, err := db.Query(`   SELECT       r.id, r.name, r.description, gt.name, NOT(SUM(NOT i.vegan) > 0), SUM(i.alcoholic) > 0
-							FROM         recipe r,
-										 glass_type gt,
-										 ingredient i,
-										 recipe_ingredient ri
-							WHERE        r.glass_type_id = gt.id
-							AND          r.id = ri.recipe_id
-							AND          i.id = ri.ingredient_id
-							AND NOT EXISTS (
-								SELECT       NULL
-								FROM         recipe r2
-								INNER JOIN   recipe_ingredient ri2 ON r2.id = ri2.recipe_id
-								INNER JOIN   ingredient i2 ON i2.id = ri2.ingredient_id
-								INNER JOIN   dispenser_type dt ON dt.id = i2.dispenser_type_id
-								LEFT OUTER   JOIN dispenser d ON CAST(d.ingredient_id AS INTEGER) = CAST(ri.ingredient_id AS INTEGER)
-								WHERE        d.id IS NULL
-								AND          dt.manual = 0
-								AND          r2.id = r.id
-							)
-							GROUP BY     r.id, r.name, r.description, gt.name`)
+  rows, err := db.Query(`
+          select
+            r.id,
+            r.name,
+            r.description,
+            gt.name,
+            not exists
+            (
+              select null
+              from recipe_ingredient ri2
+              inner join ingredient i2 on ri2.ingredient_id = i2.id
+              where ri2.recipe_id = r.id
+                and i2.vegan = 0
+            ) as vegan,
+            exists
+            (
+              select null
+              from recipe_ingredient ri2
+              inner join ingredient i2 on ri2.ingredient_id = i2.id
+              where ri2.recipe_id = r.id
+                and i2.alcoholic = 1
+            ) as alcoholic
+          from recipe r
+          inner join glass_type gt on r.glass_type_id = gt.id
+          and not exists 
+          (
+            select      null
+            from        recipe r2
+            inner join  recipe_ingredient ri on r2.id = ri.recipe_id
+            inner join  ingredient i on i.id = ri.ingredient_id
+            inner join  dispenser_type dt on dt.id = i.dispenser_type_id
+            left outer  join dispenser d on cast(d.ingredient_id as integer) = cast(ri.ingredient_id as integer)
+            where       d.id is null 
+            and         dt.manual = 0
+            and         r2.id = r.id
+          )`)
   if err != nil {
-    // TODO
     panic(fmt.Sprintf("%v", err))
   }
   defer rows.Close()
@@ -1176,17 +1191,23 @@ func getCommandList(drink_order_id int, recipe_id int) ([]string, int) {
     commandList = append(commandList, fmt.Sprintf("M %d", rail_position))
 
     // Dispense
-    if dispenser_type == DISPENSER_MIXER || dispenser_type == DISPENSER_SYRINGE {
-      // For the mixer and syringe, send qty as the number of milliseconds to dispense for
-      commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, qty * dispenser_param))
-    } else {
-      for qty > 0 {
-        qty--
-        commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, dispenser_param))
-      }
+    switch dispenser_type {
+      case DISPENSER_MIXER, DISPENSER_SYRINGE: 
+        // For the mixer and syringe, send qty as the number of milliseconds to dispense for
+        commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, qty * dispenser_param))
+
+      case DISPENSER_DASHER:
+        // For dashers, the paramter is the number of dashes to despense
+        commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, qty))
+
+      default:
+        for qty > 0 {
+          qty--
+          commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, dispenser_param))
+        }
     }
   }
-  
+
   // move to home position when done
   commandList = append(commandList, fmt.Sprintf("M 7080")) // TODO: move to home command.
   

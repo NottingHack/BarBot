@@ -3,7 +3,7 @@
 
 BOARD_TAG    = mega2560
 ARDUINO_PORT = /dev/ttyACM0
-ARDUINO_LIBS = AccelStepper Servo BarBot
+ARDUINO_LIBS = AccelStepper Servo BarBot Adafruit_NeoPixel
 USER_LIB_PATH := $(realpath ../lib)
 
 include /usr/share/arduino/Arduino.mk
