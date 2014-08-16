@@ -13,6 +13,7 @@ To run the web interface:
     $ cd $GOHOME
     $ go get github.com/mattn/go-sqlite3
     $ go get github.com/tarm/goserial
+    $ go get github.com/abbot/go-http-auth
 
 5. Run the web server like this:
 

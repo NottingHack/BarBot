@@ -15,6 +15,7 @@ import (
   "strconv"
   "flag"
   "bufio"
+  auth "github.com/abbot/go-http-auth"
 )
 
 const ORDER_FMT = "%05d"
@@ -145,6 +146,7 @@ const (
 
 var BarbotSerialChan chan []string
 var Direct bool
+var Password string
 
 // showMenu displays the list of available drinks to the user
 func showMenu(db *sql.DB, w http.ResponseWriter) {
@@ -1222,7 +1224,7 @@ func getCommandList(drink_order_id int, recipe_id int) ([]string, int) {
     switch dispenser_type {
       case DISPENSER_MIXER, DISPENSER_SYRINGE: 
         // For the mixer and syringe, send qty as the number of milliseconds to dispense for
-        commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, qty * dispenser_param))
+        commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id,  qty * dispenser_param))
 
       case DISPENSER_DASHER:
         // For dashers, the paramter is the number of dashes to despense
@@ -1285,6 +1287,23 @@ func getIngredientPosition(ingredient_id int) (int, int) {
   return rail_position,dispenser_id
 }
 
+func Secret(user, realm string) string {
+  // Ignore all MD5 stuff - it's for the benifit of go-http-auth; the password is sent by 
+  // the browser in clear text and specifed on the command line in clear text.
+  
+  if user == "barbot" {
+    
+    e := auth.NewMD5Entry("$1$YeNsbWdH$wvOF8JdqsoiLix754LTW90") // used for salt
+    if e == nil {
+      return ""
+    }
+    result := auth.MD5Crypt([]byte(Password), e.Salt, e.Magic)
+
+    return string(result)
+  }
+  return ""
+}
+
 func main() {
   // Two modes of operation:
   // 1. Normal - View drinks list at /menu/, order, then operator uses /orderlist/ to pick then make the drink
@@ -1292,21 +1311,32 @@ func main() {
   //             a list at /admin/drinks/
   
   var serialPort = flag.String("serial", "/dev/ttyS0", "Serial port to use")
-  var direct =  flag.Bool("direct", false, "Disable order interface")
+  var direct     = flag.Bool("direct", false, "Disable order interface")
+  var password   = flag.String("password", "clubmate", "Password for order/admin interface"); 
+
   flag.Parse()
   Direct = *direct
+  Password = *password
+
+  authenticator := auth.NewBasicAuthenticator("BarBot login", Secret)
 
   http.HandleFunc("/menu/", drinksMenuHandler)
 
   if !Direct {
     http.HandleFunc("/order/", orderDrinkHandler)
-    http.HandleFunc("/orderlist/", orderListHandler) // TODO: password protect (e.g. using go-http-auth)
+    http.HandleFunc("/orderlist/", auth.JustCheck(authenticator, orderListHandler))
   }
 
-  http.HandleFunc("/admin/", adminHandler)
+  http.HandleFunc("/admin/", auth.JustCheck(authenticator, adminHandler))
+
+
   http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
-  http.Handle("/", http.FileServer(http.Dir("static")))
-  
+
+  http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+       http.Redirect(w, r, "/menu/", http.StatusSeeOther)
+       return
+  })
+
   BarbotSerialChan = make(chan []string);
   go BBSerial(BarbotSerialChan, *serialPort)
 
