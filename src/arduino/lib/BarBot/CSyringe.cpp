@@ -34,7 +34,7 @@ bool CSyringe::dispense(uint16_t qty)
   _state = CSyringe::BUSY;
   _syr_state = DISPENSING;
   _dispense_start = millis();
-  _dispense_time = qty;
+  _dispense_time = qty*1.5;
   
   analogWrite(_suck_pin,0);
   analogWrite(_squirt_pin,150);

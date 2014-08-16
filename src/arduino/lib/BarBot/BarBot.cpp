@@ -548,4 +548,6 @@ void BarBot::refresh_neo()
 void debug(char *msg)
 {
   Serial.println(msg);
+  Serial2.print("I ");
+  Serial2.println(msg);
 }
