@@ -1226,10 +1226,10 @@ func getCommandList(drink_order_id int, recipe_id int) ([]string, int) {
         // For the mixer and syringe, send qty as the number of milliseconds to dispense for
         adj_param := qty * dispenser_param
 
-        // For the syringe, have a minimum despense time of 250ms (1 is a special case used to move the
+        // For the syringe, have a minimum despense time of 400ms (1 is a special case used to move the
         // syringe up - need a better way of doing this (TODO)
-        if dispenser_type == DISPENSER_SYRINGE && adj_param < 250 {
-          adj_param = 250
+        if dispenser_type == DISPENSER_SYRINGE && adj_param < 400 {
+          adj_param = 400
         }
 
         commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, adj_param))
