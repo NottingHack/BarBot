@@ -1224,7 +1224,15 @@ func getCommandList(drink_order_id int, recipe_id int) ([]string, int) {
     switch dispenser_type {
       case DISPENSER_MIXER, DISPENSER_SYRINGE: 
         // For the mixer and syringe, send qty as the number of milliseconds to dispense for
-        commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id,  qty * dispenser_param))
+        adj_param := qty * dispenser_param
+
+        // For the syringe, have a minimum despense time of 250ms (1 is a special case used to move the
+        // syringe up - need a better way of doing this (TODO)
+        if dispenser_type == DISPENSER_SYRINGE && adj_param < 250 {
+          adj_param = 250
+        }
+
+        commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, adj_param))
 
       case DISPENSER_DASHER:
         // For dashers, the paramter is the number of dashes to despense
