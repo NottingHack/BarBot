@@ -35,6 +35,7 @@
 #define SPEED_NORMAL        1500  // Normal speed
 #define MAX_ACCEL           3000
 #define GLASS_SENSE_PIN       15
+#define PLATFORM_TX           14
 #define NEO0_PIN               7
 
 #define NEO_DASHER0   0

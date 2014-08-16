@@ -2,6 +2,7 @@
 
 BarBot::BarBot()
 {
+  Serial3.begin(9600);
   // Dasher neopixel rings
   _dasher_neo = new Adafruit_NeoPixel(72,NEO0_PIN,NEO_GRB+NEO_KHZ800);
   _dasher_neo->begin();
@@ -80,7 +81,8 @@ BarBot::BarBot()
   else
     set_state(BarBot::FAULT); // estop pressed
 
-  //digitalWrite(14, LOW);
+  //pinMode(PLATFORM_TX, OUTPUT);
+  //digitalWrite(PLATFORM_TX, LOW);
 
 }
 
@@ -452,8 +454,7 @@ BarBot::barbot_state BarBot::get_state()
 }
    
 bool BarBot::glass_present()
-{  
-  return true;
+{
   static uint8_t delay;
   static int last_state;
   static int glass_state;
