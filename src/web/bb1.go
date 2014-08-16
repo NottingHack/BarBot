@@ -29,7 +29,6 @@ type Recipe struct {
   ImageName string
   Vegan bool
   Alcoholic bool
-  Flags string
   VeganIcon string
   AlcoholIcon string
 }
@@ -52,6 +51,7 @@ type MenuItem struct {
   DrinkName   string
   Description string
   Direct      bool
+  Dietary     string
   Ingredients []MenuItemIngredient
 }
 
@@ -190,15 +190,8 @@ func getReceipes(db *sql.DB) ([]Recipe) {
   for rows.Next() {
     var recipe Recipe
     rows.Scan(&recipe.Id, &recipe.Name, &recipe.Description, &recipe.GlassName, &recipe.Vegan, &recipe.Alcoholic)
-	re := regexp.MustCompile("[^a-zA-Z_ ]")
-	imageFile := "static/images/receipes/" + strings.Replace(strings.ToLower(re.ReplaceAllString(recipe.Name, "")) + ".jpg", " ", "_", -1)
-	if _, err := os.Stat(imageFile); os.IsNotExist(err) {
-		fmt.Printf("could not find image file \"%s\"\n", imageFile)
-		recipe.ImageName = "static/images/receipes/0_generic_" + strings.ToLower(recipe.GlassName) + ".jpg"
-	} else {
-		recipe.ImageName = imageFile
-	}
-	recipe.Flags = ""
+	recipe.ImageName = getDrinkIcon(recipe.Name, recipe.GlassName)
+
 	if recipe.Vegan {
 		recipe.VeganIcon = "/static/images/vegan.png"
 	} else {
@@ -220,21 +213,37 @@ func getReceipes(db *sql.DB) ([]Recipe) {
 
 // showMenuItem shows details of a drink selected from the menu (ingredients, etc)
 func showMenuItem(db *sql.DB, w http.ResponseWriter, r *http.Request) {
-      var menuitem MenuItem
-      drink_id := r.URL.Path[len("/menu/"):]
+	var menuitem MenuItem
+	drink_id := r.URL.Path[len("/menu/"):]
 
-      // Get basic receipe information
-      row := db.QueryRow("select id, name, description from recipe where id = ?", drink_id)
-      err := row.Scan(&menuitem.Id, &menuitem.DrinkName, &menuitem.Description)
-      if err == sql.ErrNoRows {
-        http.NotFound(w, r)
-        return
-      }
-      menuitem.Direct = Direct
-      menuitem.Ingredients = getRecipeIngrediants(db, drink_id)
+	// Get basic receipe information
+	row := db.QueryRow("select id, name, description from recipe where id = ?", drink_id)
+	err := row.Scan(&menuitem.Id, &menuitem.DrinkName, &menuitem.Description)
+	if err == sql.ErrNoRows {
+		http.NotFound(w, r)
+		return
+	}
 
-      t, _ := template.ParseFiles("menu_item.html")
-      t.Execute(w, menuitem)
+	menuitem.Dietary = ""
+    tx, _ := db.Begin()
+    defer tx.Rollback()
+    if recipeContainsAlcohol(tx, strconv.Itoa(menuitem.Id)) {
+		menuitem.Dietary += "One or more ingredients in this recipe contain alcohol. "
+	} else {
+		menuitem.Dietary += "There is no alcohol in this recipe. "
+    }
+
+    if recipeIsVegan(tx, strconv.Itoa(menuitem.Id)) {
+		menuitem.Dietary += "This recipe is vegan. "
+	} else {
+		menuitem.Dietary += "One or more ingredients in this recipe contain animal products. "
+    }
+
+	menuitem.Direct = Direct
+	menuitem.Ingredients = getRecipeIngrediants(db, drink_id)
+
+	t, _ := template.ParseFiles("menu_item.html")
+	t.Execute(w, menuitem)
 }
 
 func getRecipeIngrediants(db *sql.DB, drink_id string) ([]MenuItemIngredient) {
@@ -963,14 +972,13 @@ func completeOrder(db *sql.DB, w http.ResponseWriter, r *http.Request, p string)
 func recipeContainsAlcohol(tx *sql.Tx, recipe_id string) bool {
 
   sql := `
-        select 
-          count(*)
-        from recipe r
-        inner join recipe_ingredient ri on ri.recipe_id = r.id
-        inner join ingredient i on i.id = ri.ingredient_id
-        where r.id = ?
-          and alcoholic = 1`
-  
+        SELECT     COUNT(1)
+        FROM       recipe r
+        INNER JOIN recipe_ingredient ri ON ri.recipe_id = r.id
+        INNER JOIN ingredient i ON i.id = ri.ingredient_id
+        WHERE      r.id = ?
+        AND        alcoholic = 1`
+
   var alcoholic int
   row := tx.QueryRow(sql, recipe_id)
 
@@ -979,7 +987,7 @@ func recipeContainsAlcohol(tx *sql.Tx, recipe_id string) bool {
     panic(fmt.Sprintf("recipeContainsAlcohol failed: %v", err))
     return true
   }
-  
+
   if alcoholic > 0 {
     return true
   } else {
@@ -988,11 +996,37 @@ func recipeContainsAlcohol(tx *sql.Tx, recipe_id string) bool {
 
 }
 
+func recipeIsVegan(tx *sql.Tx, recipe_id string) bool {
+
+  sql := `SELECT NOT(SUM(NOT(i.vegan)) > 0)
+          FROM   recipe r,
+                 recipe_ingredient ri,
+                 ingredient i
+          WHERE  r.id = ?
+          AND    ri.recipe_id = r.id
+          AND    ri.ingredient_id = i.id`
+
+  var vegan int
+  row := tx.QueryRow(sql, recipe_id)
+
+  err := row.Scan(&vegan)
+  if err != nil {
+    panic(fmt.Sprintf("recipeIsVegan failed: %v", err))
+    return true
+  }
+
+  if vegan > 0 {
+    return true
+  } else {
+    return false
+  }
+
+}
+
 func orderDrinkHandler(w http.ResponseWriter, r *http.Request) {
-  
     var err error
     var db *sql.DB
-    
+
     if len(r.URL.Path) <= len("/order/") {
       http.NotFound(w, r)
       return
@@ -1209,6 +1243,17 @@ func getCommandList(drink_order_id int, recipe_id int) ([]string, int) {
   commandList = append(commandList, fmt.Sprintf("G"))
 
   return commandList, 0
+}
+
+func getDrinkIcon(drinkName string, glassName string) string {
+	re := regexp.MustCompile("[^a-zA-Z_ ]")
+	imageFile := "static/images/receipes/" + strings.Replace(strings.ToLower(re.ReplaceAllString(drinkName, "")) + ".jpg", " ", "_", -1)
+	if _, err := os.Stat(imageFile); os.IsNotExist(err) {
+		fmt.Printf("could not find image file \"%s\"\n", imageFile)
+		return "/static/images/receipes/0_generic_" + strings.ToLower(re.ReplaceAllString(glassName, "")) + ".jpg"
+	} else {
+		return "/" + imageFile
+	}
 }
 
 // getIngredientPosition returns a suitable rail_position and dispenser_id for the requested ingrediant
