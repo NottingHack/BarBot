@@ -909,6 +909,9 @@ func getCommandList(drink_order_id int) ([]string, int) {
   // Clear any previous instructions
   commandList = append(commandList, fmt.Sprintf("C"))
   
+  // Display order number
+  commandList = append(commandList, fmt.Sprintf("O %d", drink_order_id))
+
   for rows.Next() {
     var ingredient_id int
     var qty int

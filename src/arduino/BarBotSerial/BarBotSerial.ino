@@ -117,7 +117,12 @@ void process_message(char *msg)
       bb->instructions_clear();
       bb->instruction_add(BarBot::ZERO, 0, 0);  
       bb->go();
-     
+	  break;
+    
+	case 'O': // Order number
+	  bb->instruction_add(BarBot::DISPLAYNUM, param1, 0);
+	  break;
+
     default:
       Serial.println("Unexpected instruction!");
       return;

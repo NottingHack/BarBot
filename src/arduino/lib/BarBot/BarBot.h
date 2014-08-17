@@ -12,6 +12,7 @@
 #include "CSlice.h"
 #include "CMixer.h"
 #include "CDasher.h"
+#include "CDisplay.h"
 
 #include "Arduino.h"
 #include "AccelStepper.h"
@@ -45,7 +46,8 @@ class BarBot
       MOVE,       // Move to position <param1>
       DISPENSE,   // Dispense using dispenser <param1> with <param2>
       WAIT,       // Wait for <param1> ms
-      ZERO        // Move platform until it hits the limit switch, then call that 0
+      ZERO,        // Move platform until it hits the limit switch, then call that 0
+      DISPLAYNUM  // Show <param1> on external display
     };
 
     enum barbot_state
@@ -85,6 +87,7 @@ class BarBot
     unsigned long long _wait_inst_start;
     unsigned long long _move_start;
     AccelStepper *_stepper;
+	CDisplay *_display;
     long _stepper_target;
     CDispenser *_dispeners[DISPENSER_COUNT];
     bool glass_present();

@@ -49,6 +49,9 @@ BarBot::BarBot()
   _stepper->disableOutputs();
   _stepper->run();
   
+  // Display for order number output
+  _display = new Display();
+
   set_state(BarBot::IDLE);
   _current_instruction = 0;
   _stepper_target = 0;
@@ -182,6 +185,10 @@ bool BarBot::exec_instruction(uint16_t ins)
       move_to(14000);  // TODO: suitable value
       _stepper->run();
       break;
+
+	case DISPLAYNUM:
+      _display->setOutput(cmd->Param1);
+      break
   }
 
   return true;  
@@ -309,6 +316,10 @@ bool BarBot::loop()
           _stepper->setMaxSpeed(SPEED_NORMAL);
         }
         break;
+
+	  case DISPLAYNUM :
+        done = !_display->isBusy();
+		break;
     }
   
     _stepper->run();
