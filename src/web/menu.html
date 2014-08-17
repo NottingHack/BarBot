@@ -1,40 +1,25 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{.Title}}</title>
-
-    <!-- Bootstrap -->
-    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
-
-  </head>
-  <body>
+{{define "menu"}}
     <h1>{{.Title}}</h1>
+    
+    {{$admin := .Admin}}
     
     <table class="table table-bordered">
       {{with .Recipes}}
         {{range .}}
           <tr>
+            {{if $admin}}
+            <td style="width: 100px;"><a href="details/{{.Id}}"><img src="{{.ImageName}}" class="img-rounded" width="100px" alt="{{.Name}}"></a></td> 
+            {{else}}
             <td style="width: 100px;"><a href="{{.Id}}"><img src="{{.ImageName}}" class="img-rounded" width="100px" alt="{{.Name}}"></a></td> 
+            {{end}}
             <td>
                 <h3><a href="{{.Id}}">{{.Name}}</a></h3>
                 <p>{{.Description}}</p>
                 <img src="{{.AlcoholIcon}}">
                 <img src="{{.VeganIcon}}">
-	    </td>
+            </td>
           </tr>
         {{end}}
       {{end}}
-    </table>    
-
-
-    
-    
-    <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
-    <!-- Include all compiled plugins (below), or include individual files as needed -->
-    <script src="/static/js/bootstrap.min.js"></script>
-  </body>
-</html>
+    </table>
+{{end}}

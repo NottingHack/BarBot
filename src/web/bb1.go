@@ -37,6 +37,7 @@ type Recipe struct {
 type DrinksMenu struct {
   Title     string
   Recipes   []Recipe
+  Admin     bool
 }
 
 type MenuItemIngredient struct {
@@ -151,11 +152,12 @@ var Password string
 
 // showMenu displays the list of available drinks to the user
 func showMenu(db *sql.DB, w http.ResponseWriter) {
+  tmpl, _ := template.ParseFiles("main_header.html", "menu.html", "main_footer.html")
+  menu := DrinksMenu{"Drinks", getReceipes(db), false}
 
-  menu := DrinksMenu{"Drinks", getReceipes(db)}
-
-  t, _ := template.ParseFiles("menu.html")
-  t.Execute(w, menu)
+  tmpl.ExecuteTemplate(w, "main_header", nil)
+  tmpl.ExecuteTemplate(w, "menu"       , menu)
+  tmpl.ExecuteTemplate(w, "main_footer", nil)
 }
 
 func getReceipes(db *sql.DB) ([]Recipe) {
@@ -723,7 +725,7 @@ func adminControlDispenser(w http.ResponseWriter, r *http.Request, param string)
 }
 
 func adminMenu(w http.ResponseWriter, r *http.Request, param string) {
-  tmpl, _ := template.ParseFiles("admin_header.html", "admin_menu.html", "admin_recipe_details.html", "admin_footer.html")
+  tmpl, _ := template.ParseFiles("admin_header.html", "menu.html", "admin_recipe_details.html", "admin_footer.html")
 
   // Open database
   db := getDBConnection()
@@ -776,10 +778,10 @@ func adminMenu(w http.ResponseWriter, r *http.Request, param string) {
     return
   }
   
-  menu := DrinksMenu{"Drinks", getReceipes(db)}
+  menu := DrinksMenu{"Drinks", getReceipes(db), true}
 
   tmpl.ExecuteTemplate(w, "admin_header", nil)
-  tmpl.ExecuteTemplate(w, "admin_menu"  , menu)
+  tmpl.ExecuteTemplate(w, "menu"        , menu)
   tmpl.ExecuteTemplate(w, "admin_footer", nil)
   return
 }
