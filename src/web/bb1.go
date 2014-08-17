@@ -126,6 +126,7 @@ type AdminDispenser struct {
   Id              int
   Name            string
   Rail_position   int
+  Ingredient      string
 }
 
 type AdminControl struct {
@@ -553,6 +554,13 @@ func adminDispenser(w http.ResponseWriter, r *http.Request, param string) {
   }
 
   var dispensers = make([]DispenserDetails,21) // TODO: Do not hard code number of dispenersers...
+  
+  for i:=0; i < 21; i++ {
+    var ingr DispenserIngredients
+    ingr.Id = -1
+    ingr.Name = "(None)"
+    dispensers[i].Ingredients = append(dispensers[i].Ingredients, ingr)
+  }
 
   // Get a list of all dispensers, possible ingrediants and current ingrediant
   sql := `
@@ -561,7 +569,8 @@ func adminDispenser(w http.ResponseWriter, r *http.Request, param string) {
       d.name as dispenser_name,
       case when d.ingredient_id = i.id then 1 else 0 end as current,
       i.id as ingredient_id,
-      i.name as ingredient_name
+      i.name as ingredient_name,
+      ifnull(d.ingredient_id, -1)
     from dispenser d 
     inner join dispenser_type dt on dt.id = d.dispenser_type_id
     left outer join ingredient i on d.dispenser_type_id = i.dispenser_type_id
@@ -581,12 +590,16 @@ func adminDispenser(w http.ResponseWriter, r *http.Request, param string) {
     var dispenser_id int
     var dispenser_name string
     var current int
+    var ingredient_id int
 
-    rows.Scan(&dispenser_id, &dispenser_name, &current, &ingr.Id, &ingr.Name)
+    rows.Scan(&dispenser_id, &dispenser_name, &current, &ingr.Id, &ingr.Name, ingredient_id)
     if current==1 {
       ingr.Current = true
     } else {
       ingr.Current = false
+    }
+    if ingredient_id==-1 {
+      dispensers[dispenser_id].Ingredients[0].Current = true // set the "none" ingrediant to current
     }
     dispensers[dispenser_id].Ingredients = append(dispensers[dispenser_id].Ingredients, ingr)
     dispensers[dispenser_id].Name = dispenser_name
@@ -657,9 +670,11 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
     select
       d.id as dispenser_id,
       d.name as dispenser_name,
-      d.rail_position
+      d.rail_position,
+      ifnull(i.name, '(None)')
     from dispenser d 
     inner join dispenser_type dt on dt.id = d.dispenser_type_id
+    left outer join ingredient i on i.id = d.ingredient_id
     where dt.manual = 0
     order by d.id
   `
@@ -674,7 +689,7 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
   for rows.Next() {
     var dispenser AdminDispenser
 
-    rows.Scan(&dispenser.Id, &dispenser.Name, &dispenser.Rail_position)
+    rows.Scan(&dispenser.Id, &dispenser.Name, &dispenser.Rail_position, &dispenser.Ingredient)
     control.Dispensers = append(control.Dispensers, dispenser)
   }
   

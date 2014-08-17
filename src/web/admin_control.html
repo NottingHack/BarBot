@@ -12,6 +12,7 @@
         <td>Move to</td>
         <td>Param</td>
         <td>Dispense</td>
+        <td>Ingrediant<td>
       </tr>
       
       {{range .Dispensers}}
@@ -20,6 +21,7 @@
         <td><a href="/admin/control/move/{{.Rail_position}}" class="btn btn-default btn-lg" role="button">Move</a></td>
         <td><input type="text" name="{{.Id}}" class="form-control" value="1"></td>
         <td><button type="submit" name="dispense" value="{{.Id}}" class="btn btn-default btn-lg">Dispense</button></td>
+        <td>{{.Ingredient}}</td>
       </tr>
       {{end}}
       
