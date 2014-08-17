@@ -50,7 +50,7 @@ BarBot::BarBot()
   _stepper->run();
   
   // Display for order number output
-  _display = new Display();
+  _display = new Display(28, 29);
 
   set_state(BarBot::IDLE);
   _current_instruction = 0;
