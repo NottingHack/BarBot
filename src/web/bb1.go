@@ -66,6 +66,7 @@ type OrderSent struct {
   OrderId     string
   Success     bool
   FailReason  string
+  Ingredients []MenuItemIngredient
 }
 
 type OrderDetails struct {
@@ -900,7 +901,9 @@ func makeOrder(db *sql.DB, w http.ResponseWriter, r *http.Request, p string) boo
   
   // Generate command list. This will fail if not all the ingrediants are present
   fmt.Printf("makeOrder: preparing command list for order [%d]\n", drink_order_id)
-  cmdList, ret := getCommandList(drink_order_id, -1)
+  cmdList, ret, recipe_id := getCommandList(drink_order_id, -1)
+  
+  details.Ingredients = getRecipeIngrediants(db, strconv.Itoa(recipe_id))
   
   if ret != 0 {
     fmt.Printf("makeOrder: failed to generate command list!\n")
@@ -943,7 +946,7 @@ func makeOrderDirect(db *sql.DB, w http.ResponseWriter, r *http.Request, p strin
 
   // Generate command list. This will fail if not all the ingrediants are present
   fmt.Printf("makeOrder: preparing command list for receipe [%d]\n", recipe_id)
-  cmdList, ret := getCommandList(-1, recipe_id)
+  cmdList, ret, _ := getCommandList(-1, recipe_id)
 
   if ret != 0 {
     fmt.Printf("makeOrder: failed to generate command list!\n")
@@ -1161,8 +1164,9 @@ func BBSerial(instructionList chan []string, serialPort string) {
   
 }
 
-// getCommandList takes a drink_order_id, and returns a set of insturctions to be sent to barbot to make it
-func getCommandList(drink_order_id int, recipe_id int) ([]string, int) {
+// getCommandList takes a drink_order_id, and returns a set of insturctions to be sent to 
+// barbot to make it, a retval (0=success) and the recipe_id
+func getCommandList(drink_order_id int, recipe_id int) ([]string, int, int) {
 /*
  * Instructions generated:
  *   M nnnnn               - move to rail position nnnnn
@@ -1174,6 +1178,7 @@ func getCommandList(drink_order_id int, recipe_id int) ([]string, int) {
    defer db.Close()
  
    var sql_param int
+   var ret_recipe_id int
    
    // Get a list of ingrediants required
   sqlstr := `select 
@@ -1181,7 +1186,8 @@ func getCommandList(drink_order_id int, recipe_id int) ([]string, int) {
                ri.qty,
                i.dispenser_param,
                dt.id,
-               dt.unit_size
+               dt.unit_size,
+               r.id
              `
   if drink_order_id > 0 { // order id given, use that...
     sqlstr += `
@@ -1227,11 +1233,11 @@ func getCommandList(drink_order_id int, recipe_id int) ([]string, int) {
     var dispenser_type int
     var unit_size int
       
-    rows.Scan(&ingredient_id, &qty, &dispenser_param, &dispenser_type, &unit_size)
+    rows.Scan(&ingredient_id, &qty, &dispenser_param, &dispenser_type, &unit_size, &ret_recipe_id)
     
     rail_position, dispenser_id := getIngredientPosition(ingredient_id)
     if dispenser_id == -1 {
-      return nil, -1
+      return nil, -1, ret_recipe_id
     }
 
     // move to the correct position
@@ -1269,7 +1275,7 @@ func getCommandList(drink_order_id int, recipe_id int) ([]string, int) {
   // Go!
   commandList = append(commandList, fmt.Sprintf("G"))
 
-  return commandList, 0
+  return commandList, 0, ret_recipe_id
 }
 
 func getDrinkIcon(drinkName string, glassName string) string {
