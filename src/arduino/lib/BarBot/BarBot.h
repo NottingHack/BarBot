@@ -13,14 +13,14 @@
 #include "CMixer.h"
 #include "CDasher.h"
 #include "CSyringe.h"
-
+#include "CDisplay.h"
 
 #include "Arduino.h"
 #include "AccelStepper.h"
 #include <avr/pgmspace.h>
 #include "Adafruit_NeoPixel.h"
 
-#define MAX_INSTRUCTIONS     100  // Maximum number of instructions that can be stored
+#define MAX_INSTRUCTIONS    100  // Maximum number of instructions that can be stored
 
 #define MAX_MOVE_TIME      19000  // Maximum amount of time moving the platform should take (in ms).
 #define STEPS_PER_CM          48  // Number of steps per CM (platform movement)
@@ -34,7 +34,7 @@
 #define SPEED_ZERO           800  // Speed when zeroing
 #define SPEED_NORMAL        1500  // Normal speed
 #define MAX_ACCEL           3000
-#define GLASS_SENSE_PIN       15
+#define GLASS_SENSE_PIN       15 
 #define PLATFORM_TX           14
 #define NEO0_PIN               7
 
@@ -76,7 +76,8 @@ class BarBot
       MOVE,       // Move to position <param1>
       DISPENSE,   // Dispense using dispenser <param1> with <param2>
       WAIT,       // Wait for <param1> ms
-      ZERO        // Move platform until it hits the limit switch, then call that 0
+      ZERO,       // Move platform until it hits the limit switch, then call that 0
+      DISPLAYNUM  // Show <param1> on external display
     };
 
     enum barbot_state
@@ -104,7 +105,7 @@ class BarBot
       uint16_t          param1;
       uint16_t          param2;
     };
-
+         
     bool exec_instruction(uint16_t instruction);
     void move_to(long pos);
     void move_to(long pos, bool force);
@@ -115,7 +116,6 @@ class BarBot
     void dasher_wheel(uint8_t dasher);
     void set_neo_colour(barbot_state state);
     
-    
     barbot_state _state;
     instruction _instructions[MAX_INSTRUCTIONS];
     uint16_t _instruction_count;
@@ -123,6 +123,7 @@ class BarBot
     unsigned long long _wait_inst_start;
     unsigned long long _move_start;
     AccelStepper *_stepper;
+	CDisplay *_display;
     long _stepper_target;
     CDispenser *_dispeners[DISPENSER_COUNT];
     bool glass_present();
