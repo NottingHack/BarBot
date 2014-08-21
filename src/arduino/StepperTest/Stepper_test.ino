@@ -131,6 +131,8 @@ void loop()
 void serialEvent()
 {
   char c;
+  int dly=50;
+
   
   c=(char)Serial.read();
   Serial.println(c);
@@ -183,11 +185,22 @@ void serialEvent()
       break;
 
 // Neopixel tests
-    case 'A':
     case 'a':
      colorWipe0(strip0.Color(255,0,0),10); // red
      colorWipe1(); 
      break;
+
+    case 'A':
+      servoOptic0.write(180);
+      for(int i=0;i<50;i++)
+      {      
+        delay(dly); 
+        colorWipe2(); 
+        delay(dly);
+        colorWipe1();
+      } 
+      servoOptic0.write(0);
+      break;
 
     case 'B':
     case 'b':
