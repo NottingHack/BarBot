@@ -11,8 +11,9 @@
 
   </head>
   <body>
-    <h1>You selected {{.DrinkName}}</h1>
-
+    <h1>{{.DrinkName}}</h1>
+    <p>{{.Description}}</p>
+    <p><b>{{.Dietary}}</b></p>
     <h2>Ingredients: </h2>
 
       {{with .Ingredients}}
@@ -24,8 +25,9 @@
       {{end}}
 
     <a href="/menu/" class="btn btn-default btn-lg" role="button">Back</a>
+    {{if not .Direct}}
     <a href="/order/{{.Id}}" class="btn btn-success btn-lg" role="button">Order</a>
-
+    {{end}}
 
 
 

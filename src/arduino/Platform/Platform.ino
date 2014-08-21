@@ -1,8 +1,8 @@
-
 // Nottinghack Barbot Platform
 // Ultrasonic glass detection and Neopixel illumination
 // ATtiny85 (Needs 8 MHz clock for Neopixel library)
-// V0.3 - Added diagnostics mode and over-ride, updated glass detetection range to better suit cocktail glass
+// V0.5 - SoftwareSerial RX at 9600 added. Whilst glass present, single letter commands can be sent to override rainbow pattern and set solid Neopixel colour
+// 'R' = Red, 'G' = Green, 'B' = Blue, 'C' = Cyan, 'Y' = Yellow, 'M' = Magenta, 'W' = White,'Z' = Off, '0' = resume normal mode
 
 // NeoPixel ring
 #include <Adafruit_NeoPixel.h>
@@ -11,25 +11,30 @@
 // Ultrasonic distance sensor 
 #define TRIG_PIN  3
 #define ECHO_PIN  4
+#define US_PERIOD 250
+long us_timeout=0;
 
-// Glass distance range in cm 
+// Glass distance range in cm   
 #define MIN_GLASS_CM 1
 #define MAX_GLASS_CM 18
-
+int d=0;
+boolean glassPresent=0;
+  
 // Glass present output
 #define GP_PIN 0
 
-// Mode input - if low at power on then enters diagnostic mode, if low during normal operation then over-rides the ultrasonic sensor
-#define MODE_PIN 2
+// Serial RX pin
+#include <SoftwareSerial.h>
+#define RX_PIN 2
+SoftwareSerial SerialRX(RX_PIN,10);   // 10 is just a dummy value, no TX output required
+char c=0;
 
-typedef enum {RED,AMBER,GREEN,READY} glassState_t;
+typedef enum {RED,AMBER,GREEN,READY} 
+glassState_t;
 glassState_t glassState=RED;
 
-typedef enum {NORMAL,DIAGNOSTIC} mode_t;
-mode_t mode=NORMAL;
-
-long timeOut;
-#define TIMEOUT 2500
+int LED_cycles;
+#define NUM_CYCLES 2
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(24,NEO_PIN,NEO_GRB+NEO_KHZ800);
 
@@ -38,105 +43,149 @@ void setup()
   pinMode(TRIG_PIN,OUTPUT);
   pinMode(ECHO_PIN,INPUT);
   pinMode(GP_PIN,OUTPUT);
-  pinMode(MODE_PIN,INPUT_PULLUP);
 
   digitalWrite(GP_PIN,LOW);
 
+  SerialRX.begin(9600);
+
   strip.begin();
   strip.show();
-
-  if(digitalRead(MODE_PIN)==LOW) 
-    mode=DIAGNOSTIC;
 }
 
 void loop() 
 {
-  int d=readDistance();
-  boolean glassPresent=(d>=MIN_GLASS_CM && d<=MAX_GLASS_CM);
+  if(millis()>us_timeout)
+  {
+    d=readDistance();
+    glassPresent=(d>=MIN_GLASS_CM && d<=MAX_GLASS_CM);
+    us_timeout=millis()+US_PERIOD;
+  }
+  
+  if(SerialRX.available())
+    c=(char)SerialRX.read();
 
-  if(mode==DIAGNOSTIC)
-    showDistance(d);
+  if(!glassPresent) c=0;
+ 
+  if(c)  
+  {
+    switch(c)
+    {
+    case 'R':
+      colorSolid(strip.Color(255,0,0)); // red
+      break;
+
+    case 'G':
+      colorSolid(strip.Color(0,255,0)); // green
+      break;
+
+    case 'B':
+      colorSolid(strip.Color(0,0,255)); // blue
+      break;
+      
+    case 'C':
+      colorSolid(strip.Color(0,255,255)); // cyan
+      break;
+
+    case 'Y':
+      colorSolid(strip.Color(255,255,0)); // yellow
+      break;
+      
+    case 'M':
+      colorSolid(strip.Color(255,0,255)); // magenta
+      break;
+
+    case 'W':
+      colorSolid(strip.Color(255,255,255)); // white
+      break;
+
+    case 'Z':
+      colorSolid(strip.Color(0,0,0)); // off
+      break;
+      
+    case '0':
+    default:
+      c=0;
+      break;
+    }
+  }    
   else
   {
-    if(digitalRead(MODE_PIN)==LOW)   
-      glassPresent=1;             
-    
     switch(glassState)
     {
-      case RED:
-        if(glassPresent)
-        {
-          glassState=AMBER;
-          timeOut=millis()+TIMEOUT;
-        } 
-        else
-        {
-          colorWipe(strip.Color(255,0,0),10); // red
-          colorWipe(strip.Color(0,0,0),10);   // blank
-        }
-        break;
+    case RED:
+      if(glassPresent)
+      {
+        glassState=AMBER;
+        LED_cycles=NUM_CYCLES;
+      } 
+      else
+      {
+        colorWipe(strip.Color(255,0,0),10); // red
+        colorWipe(strip.Color(0,0,0),10);   // blank
+      }
+      break;
 
-      case AMBER:
-        if(glassPresent)
+    case AMBER:
+      if(glassPresent)
+      {
+        if(LED_cycles<=0)
         {
-          if(millis()>timeOut)
-          {
-            glassState=GREEN;
-            timeOut=millis()+TIMEOUT;
-          }
-          else
-          {
-            colorWipe(strip.Color(255,80,0),10); // amber
-            colorWipe(strip.Color(0,0,0),10);    // blank
-          }
+          glassState=GREEN;
+          LED_cycles=NUM_CYCLES;
         }
         else
         {
-          digitalWrite(GP_PIN,LOW);
-          glassState=RED;        
+          colorWipe(strip.Color(255,80,0),10); // amber
+          colorWipe(strip.Color(0,0,0),10);    // blank
+          LED_cycles--;
         }
-        break;
-
-      case GREEN:
-        if(glassPresent)
-        {
-          if(millis()>timeOut)
-          {
-            glassState=READY;
-            digitalWrite(GP_PIN,HIGH);
-          }
-          else
-          {
-            colorWipe(strip.Color(0,255,0),10); // green
-            colorWipe(strip.Color(0,0,0),10);   // blank
-          }
-        }
-        else
-        {
-          digitalWrite(GP_PIN,LOW);
-          glassState=RED;        
-        }
-        break;
-
-      case READY:
-        if(glassPresent)
-        {
-          rainbowCycle(10);
-        }
-        else
-        {
-          digitalWrite(GP_PIN,LOW);
-          glassState=RED;        
-        }
-        break;
-
-      default:
+      }
+      else
+      {
         digitalWrite(GP_PIN,LOW);
-        glassState=RED;
+        glassState=RED;        
+      }
+      break;
+
+    case GREEN:
+      if(glassPresent)
+      {
+        if(LED_cycles<=0)
+        {
+          glassState=READY;
+          digitalWrite(GP_PIN,HIGH);
+        }
+        else
+        {
+          colorWipe(strip.Color(0,255,0),10); // green
+          colorWipe(strip.Color(0,0,0),10);   // blank
+          LED_cycles--;
+        }
+      }
+      else
+      {
+        digitalWrite(GP_PIN,LOW);
+        glassState=RED;        
+      }
+      break;
+
+    case READY:
+      if(glassPresent)
+      {
+        rainbowCycle(10);
+      }
+      else
+      {
+        digitalWrite(GP_PIN,LOW);
+        glassState=RED;        
+      }
+      break;
+
+    default:
+      digitalWrite(GP_PIN,LOW);
+      glassState=RED;
     }
   }
-
-  delay(100);
 }
 
 void showDistance(int d)
@@ -160,19 +209,28 @@ void colorWipe(uint32_t c, uint8_t wait)
   }
 }
 
+void colorSolid(uint32_t c) 
+{
+  for(uint16_t i=0; i<strip.numPixels(); i++) 
+    strip.setPixelColor(i, c);
+
+  strip.show();
+}
+
 void rainbowCycle(uint8_t wait) 
 {
-  uint16_t i, j;
+  static uint16_t j;
+  uint16_t i;
 
-  for(j=0; j<256; j++) 
+  j++;
+  if(j>255) j=0;
+
+  for(i=0; i< strip.numPixels(); i++) 
   {
-    for(i=0; i< strip.numPixels(); i++) 
-    {
-      strip.setPixelColor(i, Wheel(((i * 256 / strip.numPixels()) + j) & 255));
-    }
-    strip.show();
-    delay(wait);
+    strip.setPixelColor(i, Wheel(((i * 256 / strip.numPixels()) + j) & 255));
   }
+  strip.show();
+  delay(wait);
 }
 
 uint32_t Wheel(byte WheelPos) 
@@ -195,7 +253,7 @@ uint32_t Wheel(byte WheelPos)
 
 int readDistance()
 {
-  long d;
+  long us_d;
 
   digitalWrite(TRIG_PIN,LOW); 
   delayMicroseconds(2); 
@@ -206,11 +264,9 @@ int readDistance()
   digitalWrite(TRIG_PIN,LOW);
 
   //Calculate the distance (in cm) based on the speed of sound.
-  d=pulseIn(ECHO_PIN,HIGH,10000)/58.2;
+  us_d=pulseIn(ECHO_PIN,HIGH,10000)/58.2;
 
-  return d;
+  return us_d;
 } 
-
-
 
 

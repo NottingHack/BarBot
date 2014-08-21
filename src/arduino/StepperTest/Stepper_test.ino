@@ -13,7 +13,7 @@ AccelStepper stepper(AccelStepper::DRIVER);
 #define NEO5_PIN 12
 
 Adafruit_NeoPixel strip0 = Adafruit_NeoPixel(72,NEO0_PIN,NEO_GRB+NEO_KHZ800);
-Adafruit_NeoPixel strip1 = Adafruit_NeoPixel(24,NEO1_PIN,NEO_GRB+NEO_KHZ800);
+Adafruit_NeoPixel strip1 = Adafruit_NeoPixel(1,NEO1_PIN,NEO_GRB+NEO_KHZ800);
 Adafruit_NeoPixel strip2 = Adafruit_NeoPixel(24,NEO2_PIN,NEO_GRB+NEO_KHZ800);
 Adafruit_NeoPixel strip3 = Adafruit_NeoPixel(24,NEO3_PIN,NEO_GRB+NEO_KHZ800);
 Adafruit_NeoPixel strip4 = Adafruit_NeoPixel(24,NEO4_PIN,NEO_GRB+NEO_KHZ800);
@@ -34,7 +34,8 @@ Servo servoMixer3;
 Servo servoMixer4; 
 Servo servoMixer5; 
 
-void colorWipe(uint32_t c, uint8_t wait);
+void colorWipe0(uint32_t c, uint8_t wait);
+void colorWipe1(uint32_t c, uint8_t wait);
 void rainbowCycle(uint8_t wait);
 uint32_t Wheel(byte WheelPos);
 
@@ -104,7 +105,14 @@ void setup()
   pinMode(37,INPUT_PULLUP);  // zero switch
   pinMode(53,INPUT_PULLUP);  // emergency stop switch
   
+  pinMode(28,OUTPUT);  // 7 seg - reset 
+  pinMode(29,OUTPUT);  // 7 seg - clock
+  digitalWrite(28,LOW);
+  digitalWrite(29,LOW);
+  
   Serial.begin(9600);
+
+  Serial3.begin(9600);
 }
 
 void loop()
@@ -176,22 +184,26 @@ void serialEvent()
 // Neopixel tests
     case 'A':
     case 'a':
-     colorWipe(strip0.Color(255,0,0),10); // red
+     colorWipe0(strip0.Color(255,0,0),10); // red
+     colorWipe1(strip1.Color(255,0,0),10); // red
      break;
 
     case 'B':
     case 'b':
-     colorWipe(strip0.Color(0,255,0),10); // green
+     colorWipe0(strip0.Color(0,255,0),10); // green
+     colorWipe1(strip1.Color(0,255,0),10); // green
      break;
 
     case 'C':
     case 'c':
-     colorWipe(strip0.Color(0,0,255),10); // blue
+     colorWipe0(strip0.Color(0,0,255),10); // blue
+     colorWipe1(strip1.Color(0,0,255),10); // blue
      break;
      
     case 'D':
     case 'd':
-     colorWipe(strip0.Color(255,255,255),10); // white
+     colorWipe0(strip0.Color(255,255,255),10); // white
+     colorWipe1(strip1.Color(255,255,255),10); // white
      break;
 
     case 'E':
@@ -201,7 +213,8 @@ void serialEvent()
 
     case 'F':
     case 'f':
-     colorWipe(strip0.Color(0,0,0),10); // off
+     colorWipe0(strip0.Color(0,0,0),10); // off
+     colorWipe1(strip1.Color(0,0,0),10); // off
      break;
 
 // Servo tests     
@@ -259,12 +272,13 @@ void serialEvent()
     case 'k':
       analogWrite(5,0);
       analogWrite(6,150);
-      delay(200);
+      delay(400);
       analogWrite(5,0);
       analogWrite(6,0);
+      delay(100);
       analogWrite(5,150);
       analogWrite(6,0);
-      delay(100);
+      delay(300);
       analogWrite(5,0);
       analogWrite(6,0);
       break;
@@ -352,17 +366,60 @@ void serialEvent()
       Serial.println(digitalRead(53));
       break;
 
+// Serial to platform
+    case 'V':
+    case 'v':
+      Serial3.print('R');
+      break;
+    
+    case 'W':
+    case 'w':
+      Serial3.print('W');
+      break;
+
+    case 'Z':
+    case 'z':
+      Serial3.print('Z');
+      break;
+
+// 7 segment "days accident free counter"
+    case 'X':   // reset to 0
+    case 'x':
+      digitalWrite(28,HIGH);
+      delay(1);
+      digitalWrite(28,LOW);
+      break;
+      
+    case 'Y':   // display 100
+    case 'y':
+      for(int i=0;i<100;i++)
+      {
+        digitalWrite(29,HIGH);
+        delay(1);
+        digitalWrite(29,LOW);
+        delay(1);
+      }
+      break;
+
     default:
       break;
   }
 }
 
-void colorWipe(uint32_t c, uint8_t wait) 
+void colorWipe0(uint32_t c, uint8_t wait) 
 {
   for(uint16_t i=0; i<strip0.numPixels(); i++) 
     strip0.setPixelColor(i, c);
 
   strip0.show();
+}
+
+void colorWipe1(uint32_t c, uint8_t wait) 
+{
+  for(uint16_t i=0; i<strip1.numPixels(); i++) 
+    strip1.setPixelColor(i, c);
+
+  strip1.show();
 }
 
 void rainbowCycle(uint8_t wait) 

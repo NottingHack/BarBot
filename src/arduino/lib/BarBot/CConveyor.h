@@ -7,7 +7,7 @@
 #include <avr/pgmspace.h>
 
 
-#define CONVEYOR_TIMEOUT        5000 // maximum time to wait (in ms) for a cherry/olive to be dispensed
+#define CONVEYOR_TIMEOUT        8000 // maximum time to wait (in ms) for a cherry/olive to be dispensed
 #define CONVEYOR_REVERSE_TIME   250  // How long to wait after a cherry has been sensed before switching off
 
 

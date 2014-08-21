@@ -23,6 +23,7 @@ CREATE TABLE drink_order (
 CREATE TABLE recipe ( 
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     name                TEXT NOT NULL,
+	description			TEXT NOT NULL DEFAULT '',
     show_in_menu        BOOLEAN NOT NULL DEFAULT FALSE,
     glass_type_id       REFERENCES glass_type(id)
 );

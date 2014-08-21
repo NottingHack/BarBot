@@ -4,15 +4,17 @@
 
 CMixer::CMixer(uint8_t servo_pin)
 {
-  _servo.attach(servo_pin);
+  _servo_pin = servo_pin;
   _servo.write(MIXER_IDLE_POSITION);
   _last_used = millis();
   _state = CMixer::IDLE;
+  _attached = false;
 }
 
 CMixer::~CMixer()
 {
-  _servo.detach();
+  if (_attached)
+    _servo.detach();
 }
 
 uint8_t CMixer::get_dispener_type()
@@ -26,22 +28,40 @@ bool CMixer::dispense(uint16_t qty)
   if (_state != CMixer::IDLE)
     return false;
 
+  if (!_attached)
+  {
+    _servo.attach(_servo_pin);
+    _attached = true;
+  }
+  
   _state = CMixer::BUSY;
   _dispense_start = millis();
   _servo.write(MIXER_DISPENSE_POSITION);
   _dispense_time = qty ;
+  _dispensed = false;
 
   return false;
 };
 
 bool CMixer::loop()
 {
+  if (_attached && (_state != CMixer::BUSY) && (millis()-_last_used > MIXER_DETTACH_TIME))
+  {
+    _servo.detach();
+    _attached = false;
+  }
+
   if (_state != CMixer::BUSY)
     return true;
 
-  if (millis()-_dispense_start >= _dispense_time)
+  if ((!_dispensed) && (millis()-_dispense_start >= _dispense_time))
   {
     _servo.write(MIXER_IDLE_POSITION);
+    _dispensed = true;
+  } 
+  
+  if (_dispensed && (millis()-_dispense_start >= (_dispense_time + MIXER_DELAY)))
+  {
     _last_used = millis();
     _state = CMixer::IDLE;
   }
@@ -51,7 +71,11 @@ bool CMixer::loop()
 
 void CMixer::stop()
 {
-  _servo.write(MIXER_IDLE_POSITION);
+  if (_attached)
+  {
+    _servo.write(MIXER_IDLE_POSITION);
+    _last_used = millis();
+  }
   _state = CMixer::IDLE; 
 }
 

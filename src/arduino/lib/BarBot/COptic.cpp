@@ -4,18 +4,19 @@
 
 COptic::COptic(uint8_t servo_pin, uint8_t open_pos, uint8_t closed_pos)
 {
-  _servo.attach(servo_pin);
+  _servo_pin = servo_pin;
+  _attached=false;
   _last_used = millis();
   _state = COptic::IDLE;
   _dispense_started = false;
   _closed_pos = closed_pos;
   _open_pos = open_pos;
-  _servo.write(_closed_pos);
 }
 
 COptic::~COptic()
 {
-  _servo.detach();
+  if (_attached)
+    _servo.detach();
 }
 
 uint8_t COptic::get_dispener_type()
@@ -27,17 +28,27 @@ bool COptic::dispense(uint16_t qty)
 {
   if (_state != COptic::IDLE)
     return false;
-  
+
   _state = COptic::BUSY;
   _dispense_started = false;
 
-
+  if (!_attached)
+  {
+    _servo.attach(_servo_pin);
+    _attached = true;
+  }
 
   return false;
 };
 
 bool COptic::loop()
 {
+  if (_attached && (_state != COptic::BUSY) && (millis()-_last_used > OPTIC_DETTACH_TIME))
+  {
+    _servo.detach();
+    _attached = false;
+  }
+
   if (_state != COptic::BUSY)
     return true;
   
@@ -66,7 +77,11 @@ bool COptic::loop()
 
 void COptic::stop()
 {
-  _servo.write(_closed_pos);
+  if(_attached)
+  {
+    _servo.write(_closed_pos);
+    _attached = false;
+  }
   _state = COptic::IDLE; 
 }
 

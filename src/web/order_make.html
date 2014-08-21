@@ -13,7 +13,7 @@
   <body>
   
   {{if .Success}}
-  <h1> Order sent to barbot!</h1>
+  <h1> Order {{.OrderId}} sent to barbot!</h1>
   <a href="/orderlist/complete/{{.OrderId}}" class="btn btn-success btn-lg" role="button">Complete order</a>
   <a href="/orderlist/" class="btn btn-default btn-lg" role="button">Back</a>
   {{else}}
@@ -22,5 +22,15 @@
   <a href="/orderlist/remove/{{.OrderId}}" class="btn btn-danger btn-lg" role="button">Cancel order</a>
   <a href="/orderlist/" class="btn btn-default btn-lg" role="button">Back</a>  
   {{end}}
+  <br />
+    <h2>Ingredients: </h2>
+
+      {{with .Ingredients}}
+        {{range .}}
+          <ul>
+            <li><h3>{{.Name}} - {{.ActQty}} {{.UoM}}</h3></li>
+          </ul>
+        {{end}}
+      {{end}}
   </body>
 </html>

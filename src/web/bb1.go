@@ -3,6 +3,8 @@ package main
 
 import (
   "fmt"
+  "regexp"
+  "os"
   "html/template"
   "net/http"
   "database/sql"
@@ -13,6 +15,7 @@ import (
   "strconv"
   "flag"
   "bufio"
+  auth "github.com/abbot/go-http-auth"
 )
 
 const ORDER_FMT = "%05d"
@@ -21,13 +24,20 @@ const ORDER_FMT = "%05d"
 type Recipe struct {
   Id   int
   Name string
+  Description string
   Selected bool
-  Glass_type_id int
+  GlassName string
+  ImageName string
+  Vegan bool
+  Alcoholic bool
+  VeganIcon string
+  AlcoholIcon string
 }
 
 type DrinksMenu struct {
   Title     string
   Recipes   []Recipe
+  Admin     bool
 }
 
 type MenuItemIngredient struct {
@@ -41,6 +51,9 @@ type MenuItemIngredient struct {
 type MenuItem struct {
   Id          int
   DrinkName   string
+  Description string
+  Direct      bool
+  Dietary     string
   Ingredients []MenuItemIngredient
 }
 
@@ -53,6 +66,7 @@ type OrderSent struct {
   OrderId     string
   Success     bool
   FailReason  string
+  Ingredients []MenuItemIngredient
 }
 
 type OrderDetails struct {
@@ -66,6 +80,14 @@ type OrderDetails struct {
   Glass       GlassType
 }
 
+type RecipeDetails struct {
+  DrinkName   string
+  Alcohol     bool
+  Vegan       bool
+  Ingredients []MenuItemIngredient
+  Glass       GlassType
+  RecipeID    string
+}
 type DispenserIngredients struct {
   Id int
   Name string
@@ -101,7 +123,16 @@ type AdminRecipe struct {
   RecIngredients  []AdminRecipeIngr  // Ingrediants in currently selected receipe
 }
 
+type AdminDispenser struct {
+  Id              int
+  Name            string
+  Rail_position   int
+  Ingredient      string
+}
 
+type AdminControl struct {
+  Dispensers      []AdminDispenser
+}
 
 const (
   DISPENSER_OPTIC    = 1
@@ -116,59 +147,103 @@ const (
 
 
 var BarbotSerialChan chan []string
+var Direct bool
+var Password string
 
 // showMenu displays the list of available drinks to the user
 func showMenu(db *sql.DB, w http.ResponseWriter) {
+  tmpl, _ := template.ParseFiles("main_header.html", "menu.html", "main_footer.html")
+  menu := DrinksMenu{"Drinks", getReceipes(db), false}
+
+  tmpl.ExecuteTemplate(w, "main_header", nil)
+  tmpl.ExecuteTemplate(w, "menu"       , menu)
+  tmpl.ExecuteTemplate(w, "main_footer", nil)
+}
+
+func getReceipes(db *sql.DB) ([]Recipe) {
+  var recipes []Recipe
 
       // Load drinks - only show those that can currently be made
-      rows, err := db.Query(
-         `select r.id, r.name 
-          from recipe r
-          where not exists 
-          (
-            select null
-            from recipe r2
-            inner join recipe_ingredient ri on r2.id = ri.recipe_id
-            inner join ingredient i on i.id = ri.ingredient_id
-            inner join dispenser_type dt on dt.id = i.dispenser_type_id
-            left outer join dispenser d on cast(d.ingredient_id as integer) = cast(ri.ingredient_id as integer)
-            where d.id is null 
-            and dt.manual = 0
-            and r2.id = r.id
-          )`)
+  rows, err := db.Query(`   SELECT          r.id, r.name, r.description, gt.name, NOT(SUM(NOT(i.vegan)) > 0), SUM(i.alcoholic) > 0
+							FROM            recipe r,
+											recipe_ingredient ri,
+											ingredient i,
+											glass_type gt 
+							WHERE           r.id NOT IN (
+									-- sub-select lists IDs of recipes which have missing ingredients
+									SELECT          r.id
+									FROM            recipe_ingredient ri, 
+													recipe r, 
+													ingredient i 
+									WHERE           r.id = ri.recipe_id
+									AND             ri.ingredient_id = i.id
+									AND             NOT EXISTS (
+											SELECT  1
+											FROM    dispenser d
+											WHERE   d.ingredient_id = i.id
+									)
+							)
+							AND             ri.ingredient_id = i.id
+							AND             ri.recipe_id = r.id
+							AND             r.glass_type_id = gt.id
+							GROUP BY        r.name, r.name, r.description, gt.name`)
       if err != nil {
-        // TODO
         panic(fmt.Sprintf("%v", err))
       }
       defer rows.Close()
 
-      var recipes []Recipe
       for rows.Next() {
         var recipe Recipe
-        rows.Scan(&recipe.Id, &recipe.Name)
+    rows.Scan(&recipe.Id, &recipe.Name, &recipe.Description, &recipe.GlassName, &recipe.Vegan, &recipe.Alcoholic)
+	recipe.ImageName = getDrinkIcon(recipe.Name, recipe.GlassName)
+
+	if recipe.Vegan {
+		recipe.VeganIcon = "/static/images/vegan.png"
+	} else {
+		recipe.VeganIcon = "/static/images/animal-product.png"
+	}
+
+	if recipe.Alcoholic {
+		recipe.AlcoholIcon = "/static/images/alcohol.png"
+	} else {
+		recipe.AlcoholIcon = "/static/images/non-alcoholic.png"
+	}
         recipes = append(recipes, recipe)
       }
       rows.Close()
 
-      menu := DrinksMenu{"Drinks", recipes}
-
-      t, _ := template.ParseFiles("menu.html")
-      t.Execute(w, menu)
+  return recipes
 }
 
-// showMenuItem shows details of a  In   int // current ingrediant drink selected from the menu (ingredients, etc)
+// showMenuItem shows details of a drink selected from the menu (ingredients, etc)
 func showMenuItem(db *sql.DB, w http.ResponseWriter, r *http.Request) {
       var menuitem MenuItem
       drink_id := r.URL.Path[len("/menu/"):]
 
       // Get basic receipe information
-      row := db.QueryRow("select id, name from recipe where id = ?", drink_id)
-      err := row.Scan(&menuitem.Id, &menuitem.DrinkName)
+	row := db.QueryRow("select id, name, description from recipe where id = ?", drink_id)
+	err := row.Scan(&menuitem.Id, &menuitem.DrinkName, &menuitem.Description)
       if err == sql.ErrNoRows {
         http.NotFound(w, r)
         return
       }
 
+	menuitem.Dietary = ""
+    tx, _ := db.Begin()
+    defer tx.Rollback()
+    if recipeContainsAlcohol(tx, strconv.Itoa(menuitem.Id)) {
+		menuitem.Dietary += "One or more ingredients in this recipe contain alcohol. "
+	} else {
+		menuitem.Dietary += "There is no alcohol in this recipe. "
+    }
+
+    if recipeIsVegan(tx, strconv.Itoa(menuitem.Id)) {
+		menuitem.Dietary += "This recipe is vegan. "
+	} else {
+		menuitem.Dietary += "One or more ingredients in this recipe contain animal products. "
+    }
+
+	menuitem.Direct = Direct
       menuitem.Ingredients = getRecipeIngrediants(db, drink_id)
 
       t, _ := template.ParseFiles("menu_item.html")
@@ -244,6 +319,9 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
       adminControl(w, r, req_page[len("control/"):])
       return;
 
+    case strings.HasPrefix(req_page, "menu/"):
+      adminMenu(w, r, req_page[len("menu/"):])
+      return;
     default:
       http.NotFound(w, r)
       return
@@ -477,6 +555,12 @@ func adminDispenser(w http.ResponseWriter, r *http.Request, param string) {
 
   var dispensers = make([]DispenserDetails,21) // TODO: Do not hard code number of dispenersers...
 
+  for i:=0; i < 21; i++ {
+    var ingr DispenserIngredients
+    ingr.Id = -1
+    ingr.Name = "(None)"
+    dispensers[i].Ingredients = append(dispensers[i].Ingredients, ingr)
+  }
   // Get a list of all dispensers, possible ingrediants and current ingrediant
   sql := `
     select
@@ -484,7 +568,8 @@ func adminDispenser(w http.ResponseWriter, r *http.Request, param string) {
       d.name as dispenser_name,
       case when d.ingredient_id = i.id then 1 else 0 end as current,
       i.id as ingredient_id,
-      i.name as ingredient_name
+      i.name as ingredient_name,
+      ifnull(d.ingredient_id, -1)
     from dispenser d 
     inner join dispenser_type dt on dt.id = d.dispenser_type_id
     left outer join ingredient i on d.dispenser_type_id = i.dispenser_type_id
@@ -504,12 +589,16 @@ func adminDispenser(w http.ResponseWriter, r *http.Request, param string) {
     var dispenser_id int
     var dispenser_name string
     var current int
+    var ingredient_id int
       
-    rows.Scan(&dispenser_id, &dispenser_name, &current, &ingr.Id, &ingr.Name)
+    rows.Scan(&dispenser_id, &dispenser_name, &current, &ingr.Id, &ingr.Name, ingredient_id)
     if current==1 {
       ingr.Current = true
     } else {
       ingr.Current = false
+    }
+    if ingredient_id==-1 {
+      dispensers[dispenser_id].Ingredients[0].Current = true // set the "none" ingrediant to current
     }
     dispensers[dispenser_id].Ingredients = append(dispensers[dispenser_id].Ingredients, ingr)
     dispensers[dispenser_id].Name = dispenser_name
@@ -524,6 +613,7 @@ func adminDispenser(w http.ResponseWriter, r *http.Request, param string) {
 
 func adminControl(w http.ResponseWriter, r *http.Request, param string) {
   tmpl, _ := template.ParseFiles("admin_header.html", "admin_control.html", "admin_footer.html")
+  var cmd string
 
   // Open database
   db := getDBConnection()
@@ -531,14 +621,37 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
 
   sendmsg := true
   
+  // Get reguested command from param (e.g. for move/1234, set cmd = move)
+  i := strings.Index(param, "/")
+  if i > 0 {
+    cmd = param[:i]
+  } else {
+    cmd = param
+  }
   cmdlist := make([]string, 1)
   
-  switch (param) {
+  switch (cmd) {
     case "reset":
       cmdlist[0] = "R"
       
     case "zero":
-      cmdlist[0] = "Z"
+      cmdlist[0] = "C"               // Clear current instructions
+      cmdlist = append(cmdlist, "Z") // Zero
+      cmdlist = append(cmdlist, "G") // Go
+      
+    case "move":
+      rail_position, err := strconv.Atoi(param[len("move/"):])
+      if err != nil {
+        return
+      }
+      cmdlist[0] = "C"               // Clear current instructions
+      cmdlist = append(cmdlist, fmt.Sprintf("M %d", rail_position)) // Move to rail position nnnn
+      cmdlist = append(cmdlist, "G") // Go
+
+    case "dispense":
+      BarbotSerialChan <- adminControlDispenser(w, r, param)
+      http.Redirect(w, r, "/admin/control/", http.StatusSeeOther)
+      return
       
     default:
       sendmsg = false
@@ -546,14 +659,126 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
 
   if (sendmsg) {
     BarbotSerialChan <- cmdlist
+    http.Redirect(w, r, "/admin/control/", http.StatusSeeOther)
+    return
   }
 
+  // Get a list of all dispensers
+  sql := `
+    select
+      d.id as dispenser_id,
+      d.name as dispenser_name,
+      d.rail_position,
+      ifnull(i.name, '(None)')
+    from dispenser d 
+    inner join dispenser_type dt on dt.id = d.dispenser_type_id
+    left outer join ingredient i on i.id = d.ingredient_id
+    where dt.manual = 0
+    order by d.id
+  `
+  
+  rows, err := db.Query(sql)
+  if err != nil {
+    panic(fmt.Sprintf("%v", err))
+  }
+  defer rows.Close()
+
+  var control AdminControl
+  for rows.Next() {
+    var dispenser AdminDispenser
+
+    rows.Scan(&dispenser.Id, &dispenser.Name, &dispenser.Rail_position, &dispenser.Ingredient)
+    control.Dispensers = append(control.Dispensers, dispenser)
+  }
   tmpl.ExecuteTemplate(w, "admin_header" , nil)
-  tmpl.ExecuteTemplate(w, "admin_control", nil)
+  tmpl.ExecuteTemplate(w, "admin_control", control)
   tmpl.ExecuteTemplate(w, "admin_footer" , nil)
   return
 }
 
+// adminControlDispenser returns a set up commands to dispense from the selected dispenser
+func adminControlDispenser(w http.ResponseWriter, r *http.Request, param string) ([]string) {
+  r.ParseForm()
+  
+  dispenser_id, err := strconv.Atoi(r.Form.Get("dispense"))
+  if err != nil {
+    return nil
+  }
+  
+  d_param, err := strconv.Atoi(r.Form.Get(r.Form.Get("dispense")))
+  if err != nil {
+    return nil
+  }
+  
+  commandList := make([]string, 3)
+  commandList[0] = "C"
+  commandList[1] = fmt.Sprintf("D %d %d", dispenser_id, d_param)
+  commandList[2] = "G"
+  
+  return commandList
+}
+
+func adminMenu(w http.ResponseWriter, r *http.Request, param string) {
+  tmpl, _ := template.ParseFiles("admin_header.html", "menu.html", "admin_recipe_details.html", "admin_footer.html")
+
+  // Open database
+  db := getDBConnection()
+  defer db.Close()
+
+  if strings.HasPrefix(param, "details/") {
+    recipe_id := param[len("details/"):]
+
+    // Assume recipe_id passed in (->404 if not), so also get the details of that drink
+    sqlstr := `
+      select
+        r.name,
+        gt.id,
+        gt.name
+      from recipe r
+      inner join glass_type gt on r.glass_type_id = gt.id
+      where r.id = ?`
+    var receipe RecipeDetails
+    row := db.QueryRow(sqlstr, recipe_id)
+
+    err := row.Scan(&receipe.DrinkName, &receipe.Glass.Id, &receipe.Glass.Name)
+    if err == sql.ErrNoRows {
+      http.NotFound(w, r)
+      return
+    } else {
+      if err != nil {
+        panic(fmt.Sprintf("adminMenu - failed to get recipe details: %#v", err))
+      }
+    }
+
+    tx, _ := db.Begin()
+    defer tx.Rollback()
+    receipe.Alcohol = recipeContainsAlcohol(tx, recipe_id)
+      
+    // Get list of ingrediants
+    receipe.Ingredients = getRecipeIngrediants(db, recipe_id)
+    receipe.RecipeID = recipe_id
+    
+    tmpl.ExecuteTemplate(w, "admin_header", nil)
+    tmpl.ExecuteTemplate(w, "admin_recipe_details", receipe)
+    tmpl.ExecuteTemplate(w, "admin_footer", nil)
+    return
+  }
+  
+  if strings.HasPrefix(param, "make/") {
+    if !makeOrderDirect(db, w, r, param[len("make/"):]) {
+      http.NotFound(w, r)
+      return
+    }
+    return
+  }
+  
+  menu := DrinksMenu{"Drinks", getReceipes(db), true}
+
+  tmpl.ExecuteTemplate(w, "admin_header", nil)
+  tmpl.ExecuteTemplate(w, "menu"        , menu)
+  tmpl.ExecuteTemplate(w, "admin_footer", nil)
+  return
+}
 
 // orderListHandler handles requests to /orderlist/
 func orderListHandler(w http.ResponseWriter, r *http.Request) {
@@ -669,7 +894,9 @@ func makeOrder(db *sql.DB, w http.ResponseWriter, r *http.Request, p string) boo
   
   // Generate command list. This will fail if not all the ingrediants are present
   fmt.Printf("makeOrder: preparing command list for order [%d]\n", drink_order_id)
-  cmdList, ret := getCommandList(drink_order_id)
+  cmdList, ret, recipe_id := getCommandList(drink_order_id, -1)
+  
+  details.Ingredients = getRecipeIngrediants(db, strconv.Itoa(recipe_id))
   
   if ret != 0 {
     fmt.Printf("makeOrder: failed to generate command list!\n")
@@ -699,6 +926,40 @@ func makeOrder(db *sql.DB, w http.ResponseWriter, r *http.Request, p string) boo
   return true
 }
 
+// makeOrderDirect expect <p> to be the recipe_id
+func makeOrderDirect(db *sql.DB, w http.ResponseWriter, r *http.Request, p string) bool {
+  var details OrderSent
+  
+  recipe_id, err := strconv.Atoi(p)
+  if err != nil {
+    return false 
+  }
+
+  tmpl, _ := template.ParseFiles("admin_header.html", "admin_make.html", "admin_footer.html")
+
+  // Generate command list. This will fail if not all the ingrediants are present
+  fmt.Printf("makeOrder: preparing command list for receipe [%d]\n", recipe_id)
+  cmdList, ret, _ := getCommandList(-1, recipe_id)
+
+  if ret != 0 {
+    fmt.Printf("makeOrder: failed to generate command list!\n")
+    details.Success = false
+    details.FailReason = "Missing ingrediant(s)"
+    t, _ := template.ParseFiles("order_make.html")
+    t.Execute(w, details)
+    return true
+  }
+  details.Success = true
+
+  BarbotSerialChan <- cmdList
+
+  tmpl.ExecuteTemplate(w, "admin_header", nil)
+  tmpl.ExecuteTemplate(w, "admin_make", details)
+  tmpl.ExecuteTemplate(w, "admin_footer", nil)
+  tmpl.Execute(w, details)
+
+  return true
+}
 // completeOrder marks the drink as made in the database, then redirects to the order list
 func completeOrder(db *sql.DB, w http.ResponseWriter, r *http.Request, p string) bool {
 
@@ -724,13 +985,12 @@ func completeOrder(db *sql.DB, w http.ResponseWriter, r *http.Request, p string)
 func recipeContainsAlcohol(tx *sql.Tx, recipe_id string) bool {
 
   sql := `
-        select 
-          count(*)
-        from recipe r
-        inner join recipe_ingredient ri on ri.recipe_id = r.id
-        inner join ingredient i on i.id = ri.ingredient_id
-        where r.id = ?
-          and alcoholic = 1`
+        SELECT     COUNT(1)
+        FROM       recipe r
+        INNER JOIN recipe_ingredient ri ON ri.recipe_id = r.id
+        INNER JOIN ingredient i ON i.id = ri.ingredient_id
+        WHERE      r.id = ?
+        AND        alcoholic = 1`
   
   var alcoholic int
   row := tx.QueryRow(sql, recipe_id)
@@ -749,6 +1009,32 @@ func recipeContainsAlcohol(tx *sql.Tx, recipe_id string) bool {
 
 }
 
+func recipeIsVegan(tx *sql.Tx, recipe_id string) bool {
+
+  sql := `SELECT NOT(SUM(NOT(i.vegan)) > 0)
+          FROM   recipe r,
+                 recipe_ingredient ri,
+                 ingredient i
+          WHERE  r.id = ?
+          AND    ri.recipe_id = r.id
+          AND    ri.ingredient_id = i.id`
+
+  var vegan int
+  row := tx.QueryRow(sql, recipe_id)
+
+  err := row.Scan(&vegan)
+  if err != nil {
+    panic(fmt.Sprintf("recipeIsVegan failed: %v", err))
+    return true
+  }
+
+  if vegan > 0 {
+    return true
+  } else {
+    return false
+  }
+
+}
 func orderDrinkHandler(w http.ResponseWriter, r *http.Request) {
   
     var err error
@@ -869,8 +1155,9 @@ func BBSerial(instructionList chan []string, serialPort string) {
   
 }
 
-// getCommandList takes a drink_order_id, and returns a set of insturctions to be sent to barbot to make it
-func getCommandList(drink_order_id int) ([]string, int) {
+// getCommandList takes a drink_order_id, and returns a set of insturctions to be sent to 
+// barbot to make it, a retval (0=success) and the recipe_id
+func getCommandList(drink_order_id int, recipe_id int) ([]string, int, int) {
 /*
  * Instructions generated:
  *   M nnnnn               - move to rail position nnnnn
@@ -881,13 +1168,19 @@ func getCommandList(drink_order_id int) ([]string, int) {
    db := getDBConnection()
    defer db.Close()
  
+   var sql_param int
+   var ret_recipe_id int
    // Get a list of ingrediants required
    sqlstr := `select 
                 i.id,
                 ri.qty,
                 i.dispenser_param,
                 dt.id,
-                dt.unit_size
+               dt.unit_size,
+               r.id
+             `
+  if drink_order_id > 0 { // order id given, use that...
+    sqlstr += `
               from drink_order do
               inner join recipe r on r.id = do.recipe_id
               inner join recipe_ingredient ri on ri.recipe_id = r.id
@@ -896,8 +1189,20 @@ func getCommandList(drink_order_id int) ([]string, int) {
               where do.id = ?
                 and dt.manual = 0
               order by ri.seq`
+    sql_param = drink_order_id
+   } else { // ... otherwise search by recipe_id
+    sqlstr += `
+              from recipe r
+              inner join recipe_ingredient ri on ri.recipe_id = r.id
+              inner join ingredient i on i.id = ri.ingredient_id
+              inner join dispenser_type dt on dt.id = i.dispenser_type_id
+              where r.id = ?
+                and dt.manual = 0
+              order by ri.seq`
+    sql_param = recipe_id
+  }
 
-  rows, err := db.Query(sqlstr, drink_order_id)
+  rows, err := db.Query(sqlstr, sql_param)
   if err != nil {
     panic(fmt.Sprintf("%v", err))
   }
@@ -908,10 +1213,12 @@ func getCommandList(drink_order_id int) ([]string, int) {
   
   // Clear any previous instructions
   commandList = append(commandList, fmt.Sprintf("C"))
-  
+
   // Display order number
   commandList = append(commandList, fmt.Sprintf("O %d", drink_order_id))
 
+  // Alway zero first
+  commandList = append(commandList, fmt.Sprintf("Z"))
   for rows.Next() {
     var ingredient_id int
     var qty int
@@ -919,21 +1226,35 @@ func getCommandList(drink_order_id int) ([]string, int) {
     var dispenser_type int
     var unit_size int
       
-    rows.Scan(&ingredient_id, &qty, &dispenser_param, &dispenser_type, &unit_size)
+    rows.Scan(&ingredient_id, &qty, &dispenser_param, &dispenser_type, &unit_size, &ret_recipe_id)
     
     rail_position, dispenser_id := getIngredientPosition(ingredient_id)
     if dispenser_id == -1 {
-      return nil, -1
+      return nil, -1, ret_recipe_id
     }
 
     // move to the correct position
     commandList = append(commandList, fmt.Sprintf("M %d", rail_position))
 
     // Dispense
-    if dispenser_type == DISPENSER_MIXER || dispenser_type == DISPENSER_SYRINGE {
+    switch dispenser_type {
+      case DISPENSER_MIXER, DISPENSER_SYRINGE: 
       // For the mixer and syringe, send qty as the number of milliseconds to dispense for
-      commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, qty * dispenser_param))
-    } else {
+        adj_param := (qty * 1000) / dispenser_param
+
+        // For the syringe, have a minimum despense time of 400ms (1 is a special case used to move the
+        // syringe up - need a better way of doing this (TODO)
+        if dispenser_type == DISPENSER_SYRINGE && adj_param < 400 {
+          adj_param = 400
+        }
+
+        commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, adj_param))
+
+      case DISPENSER_DASHER:
+        // For dashers, the paramter is the number of dashes to despense
+        commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, qty))
+
+      default:
       for qty > 0 {
         qty--
         commandList = append(commandList, fmt.Sprintf("D% d %d", dispenser_id, dispenser_param))
@@ -942,12 +1263,23 @@ func getCommandList(drink_order_id int) ([]string, int) {
   }
   
   // move to home position when done
-  commandList = append(commandList, fmt.Sprintf("M 0"))
+  commandList = append(commandList, fmt.Sprintf("M 7080")) // TODO: move to home command.
   
   // Go!
   commandList = append(commandList, fmt.Sprintf("G"))
 
-  return commandList, 0
+  return commandList, 0, ret_recipe_id
+}
+
+func getDrinkIcon(drinkName string, glassName string) string {
+	re := regexp.MustCompile("[^a-zA-Z_ ]")
+	imageFile := "static/images/receipes/" + strings.Replace(strings.ToLower(re.ReplaceAllString(drinkName, "")) + ".jpg", " ", "_", -1)
+	if _, err := os.Stat(imageFile); os.IsNotExist(err) {
+		fmt.Printf("could not find image file \"%s\"\n", imageFile)
+		return "/static/images/receipes/0_generic_" + strings.ToLower(re.ReplaceAllString(glassName, "")) + ".jpg"
+	} else {
+		return "/" + imageFile
+	}
 }
 
 // getIngredientPosition returns a suitable rail_position and dispenser_id for the requested ingrediant
@@ -979,17 +1311,49 @@ func getIngredientPosition(ingredient_id int) (int, int) {
   return rail_position,dispenser_id
 }
 
+func Secret(user, realm string) string {
+  // Ignore all MD5 stuff - it's for the benifit of go-http-auth; the password is sent by 
+  // the browser in clear text and specifed on the command line in clear text.
+  
+  if user == "barbot" {
+    
+    e := auth.NewMD5Entry("$1$YeNsbWdH$wvOF8JdqsoiLix754LTW90") // used for salt
+    if e == nil {
+      return ""
+    }
+    result := auth.MD5Crypt([]byte(Password), e.Salt, e.Magic)
+
+    return string(result)
+  }
+  return ""
+}
 func main() {
+  // Two modes of operation:
+  // 1. Normal - View drinks list at /menu/, order, then operator uses /orderlist/ to pick then make the drink
+  // 2. Direct - Drinks menu available at /menu/, but no option to order. Drinks can be made by picking from
+  //             a list at /admin/drinks/
   
   var serialPort = flag.String("serial", "/dev/ttyS0", "Serial port to use")
+  var direct     = flag.Bool("direct", false, "Disable order interface")
+  var password   = flag.String("password", "clubmate", "Password for order/admin interface"); 
   flag.Parse()
+  Direct = *direct
+  Password = *password
+
+  authenticator := auth.NewBasicAuthenticator("BarBot login", Secret)
   
   http.HandleFunc("/menu/", drinksMenuHandler)
+  if !Direct {
   http.HandleFunc("/order/", orderDrinkHandler)
-  http.HandleFunc("/orderlist/", orderListHandler) // TODO: password protect (e.g. using go-http-auth)
-  http.HandleFunc("/admin/", adminHandler)
+    http.HandleFunc("/orderlist/", auth.JustCheck(authenticator, orderListHandler))
+  }
+
+  http.HandleFunc("/admin/", auth.JustCheck(authenticator, adminHandler))
   http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
-  http.Handle("/", http.FileServer(http.Dir("static")))
+  http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+       http.Redirect(w, r, "/menu/", http.StatusSeeOther)
+       return
+  })
   
   BarbotSerialChan = make(chan []string);
   go BBSerial(BarbotSerialChan, *serialPort)

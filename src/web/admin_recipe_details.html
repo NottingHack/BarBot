@@ -1,0 +1,25 @@
+{{define "admin_recipe_details"}}
+
+    <h2>Drink: {{.DrinkName}}</h2>
+    <h2>Alcoholic: {{.Alcohol}}</h2>
+<!--<h2>Vegan: {{.Vegan}}</h2> -->
+    <br />
+    <h2>Recipe</h2>
+ 
+      {{with .Ingredients}}
+        {{range .}}
+          <ul>
+          {{if .Manual}}
+            <li><h3><font color="red">{{.Name}} - {{.ActQty}} {{.UoM}}</font></h3></li>
+          {{else}}
+            <li><h3>{{.Name}} - {{.ActQty}} {{.UoM}}</h3></li>
+          {{end}}
+          </ul>
+        {{end}}
+      {{end}}    
+    <br/>
+    <h2>Glass type: {{.Glass.Name}} </h2>
+    <br/>
+    <a href="/admin/menu/make/{{.RecipeID}}" class="btn btn-success btn-lg" role="button">Make</a>
+    <a href="/admin/menu/" class="btn btn-default btn-lg" role="button">Back</a>
+{{end}}

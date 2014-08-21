@@ -3,6 +3,7 @@
 
 #define OPTIC_DISPENSE_TIME     3000 // ms to activate servo for when dispensing
 #define OPTIC_RECHARGE_TIME     2500 // minimum time to wait between dispenses 
+#define OPTIC_DETTACH_TIME      1000
 
 #include "COptic.h"
 #include "CDispenser.h"
@@ -29,6 +30,8 @@ class COptic : public CDispenser
     bool _dispense_started;
     uint8_t _closed_pos;
     uint8_t _open_pos;
+    bool _attached;
+    uint8_t  _servo_pin;
 };
 
 #endif

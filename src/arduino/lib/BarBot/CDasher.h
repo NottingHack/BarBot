@@ -3,7 +3,7 @@
 
 #include "CDispenser.h"
 
-#define DASHER_TIMEOUT 7000 // Max time in ms to enable dasher for
+#define DASHER_TIMEOUT 30000 // Max time in ms to enable dasher for
 
 #include "Arduino.h"
 #include <avr/pgmspace.h>
@@ -23,7 +23,7 @@ class CDasher : public CDispenser
     unsigned long long _dispense_start;
     uint8_t _pin_cam;
     uint8_t _pin_driver;
-    uint8_t _qty;
+    uint16_t _qty;
     
     
 

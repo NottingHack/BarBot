@@ -2,6 +2,14 @@
 
 BarBot::BarBot()
 {
+  Serial3.begin(9600);
+  // Dasher neopixel rings
+  _dasher_neo = new Adafruit_NeoPixel(72,NEO0_PIN,NEO_GRB+NEO_KHZ800);
+  _dasher_neo->begin();
+  _dasher_neo->show(); // Initialize all pixels to 'off'
+  memset(_neo_buf, 0, sizeof(_neo_buf));
+  color_wipe(_dasher_neo->Color(100,100,100)); // white
+  refresh_neo();
   memset(_instructions, NOP, sizeof(_instructions));
   _instruction_count = 0;
   
@@ -10,33 +18,33 @@ BarBot::BarBot()
   {
     switch(ix)
     {
-      case 1:  _dispeners[ix] = new COptic(40, 65, 10); break; // Optic0
-      case 2:  _dispeners[ix] = new COptic(42, 10, 65); break; // Optic1
-      case 3:  _dispeners[ix] = new COptic(44, 65, 10); break; // Optic2
-      case 4:  _dispeners[ix] = new COptic(46, 10, 65); break; // Optic3
-      case 5:  _dispeners[ix] = new COptic(48, 65, 10); break; // Optic4
-      case 6:  _dispeners[ix] = new COptic(50, 65, 10); break; // Optic5
+      case DISPENSER_OPTIC0:  _dispeners[ix]   = new COptic(40, 65, 10); break; // Optic0
+      case DISPENSER_OPTIC1:  _dispeners[ix]   = new COptic(42, 10, 65); break; // Optic1
+      case DISPENSER_OPTIC2:  _dispeners[ix]   = new COptic(44, 65, 10); break; // Optic2
+      case DISPENSER_OPTIC3:  _dispeners[ix]   = new COptic(46, 10, 65); break; // Optic3
+      case DISPENSER_OPTIC4:  _dispeners[ix]   = new COptic(48, 65, 10); break; // Optic4
+      case DISPENSER_OPTIC5:  _dispeners[ix]   = new COptic(50, 65, 10); break; // Optic5
 
-      case 7:  _dispeners[ix] = new CMixer(41); break; // Preasure0
-      case 8:  _dispeners[ix] = new CMixer(43); break; // Preasure1
-      case 9:  _dispeners[ix] = new CMixer(45); break; // Preasure2 
-      case 10: _dispeners[ix] = new CMixer(47); break; // Preasure3
-      case 11: _dispeners[ix] = new CMixer(49); break; // Preasure4
-      case 12: _dispeners[ix] = new CMixer(51); break; // Preasure5
+      case DISPENSER_PREASURE0: _dispeners[ix] = new CMixer(41); break; // Preasure0
+      case DISPENSER_PREASURE1: _dispeners[ix] = new CMixer(43); break; // Preasure1
+      case DISPENSER_PREASURE2: _dispeners[ix] = new CMixer(45); break; // Preasure2 
+      case DISPENSER_PREASURE3: _dispeners[ix] = new CMixer(47); break; // Preasure3
+      case DISPENSER_PREASURE4: _dispeners[ix] = new CMixer(49); break; // Preasure4
+      case DISPENSER_PREASURE5: _dispeners[ix] = new CMixer(51); break; // Preasure5
         
-      case 13:  _dispeners[ix] = new CDasher(22, 23);  break; // Dasher0
-      case 14:  _dispeners[ix] = new CDasher(24, 25);  break; // Dasher1
-      case 15:  _dispeners[ix] = new CDasher(26, 27);  break; // Dasher2
+      case DISPENSER_DASHER0:  _dispeners[ix]  = new CDasher(22, 23);  break; // Dasher0
+      case DISPENSER_DASHER1:  _dispeners[ix]  = new CDasher(24, 25);  break; // Dasher1
+      case DISPENSER_DASHER2:  _dispeners[ix]  = new CDasher(26, 27);  break; // Dasher2
         
-      case 16: /* TODO */   _dispeners[ix] = NULL;     break;  // Syringe
+      case DISPENSER_SYRINGE:  _dispeners[ix]  = new CSyringe(5,6);    break;  // Syringe
         
-      case 17: _dispeners[ix] = new CConveyor(38, 39); break;  // Conveyor
+      case DISPENSER_CONVEYOR: _dispeners[ix]  = new CConveyor(38, 39); break;  // Conveyor
         
-      case 18: _dispeners[ix] = new CSlice(34);        break;  // Slice dispenser
+      case DISPENSER_SLICE: _dispeners[ix]     = new CSlice(34);        break;  // Slice dispenser
         
-      case 19: _dispeners[ix] = new CStirrer(36);      break;  // Stirrer
+      case DISPENSER_STIRRER: _dispeners[ix]   = new CStirrer(36);      break;  // Stirrer
         
-      case 20: _dispeners[ix] = new CUmbrella(32);     break;  // Umbrella
+      case DISPENSER_UMBRELLA: _dispeners[ix]  = new CUmbrella(32);     break;  // Umbrella
     }
   }
   
@@ -47,20 +55,33 @@ BarBot::BarBot()
   _stepper->setPinsInverted(false,false,false,false,true);
   _stepper->setEnablePin(4);
   _stepper->disableOutputs();
+  if (digitalRead(ZERO_SWITCH) == LOW)
+  {
+    _stepper_target = MAX_RAIL_POSITION;
+    _stepper->setCurrentPosition(MAX_RAIL_POSITION);
+  }
+  else
+  {
+    _stepper->setCurrentPosition(0);
+    _stepper_target = 0;
+  }
   _stepper->run();
   
   // Display for order number output
-  _display = new Display(28, 29);
-
-  set_state(BarBot::IDLE);
+  _display = new CDisplay(28, 29);
   _current_instruction = 0;
-  _stepper_target = 0;
   
   pinMode(ZERO_SWITCH    , INPUT_PULLUP);
   pinMode(ESTOP_PIN      , INPUT_PULLUP);
   pinMode(GLASS_SENSE_PIN, INPUT_PULLUP);
   
-  //digitalWrite(14, LOW);
+  if (digitalRead(ESTOP_PIN) == LOW)
+    set_state(BarBot::IDLE);  // estop not pressed
+  else
+    set_state(BarBot::FAULT); // estop pressed
+
+  //pinMode(PLATFORM_TX, OUTPUT);
+  //digitalWrite(PLATFORM_TX, LOW);
 }
 
 BarBot::~BarBot()
@@ -111,9 +132,8 @@ bool BarBot::instructions_clear()
 
 bool BarBot::reset()
 {
-  set_state(BarBot::FAULT); // Ensure stopped
+  set_state(BarBot::FAULT); // Stop everything
   instructions_clear();
-  move_to(0);
   set_state(BarBot::IDLE);
 }
 
@@ -167,6 +187,7 @@ bool BarBot::exec_instruction(uint16_t ins)
       break;
 
     case MOVE:
+      _stepper->setMaxSpeed(SPEED_NORMAL);
       move_to(cmd->param1);
       _stepper->run();
       break;
@@ -182,13 +203,13 @@ bool BarBot::exec_instruction(uint16_t ins)
 
     case ZERO:
       _stepper->setMaxSpeed(SPEED_ZERO);
-      move_to(14000);  // TODO: suitable value
+      move_to(RESET_POSITION, true);
       _stepper->run();
       break;
 
-	case DISPLAYNUM:
-      _display->setOutput(cmd->Param1);
-      break
+    case DISPLAYNUM:
+      _display->setOutput(cmd->param1);
+      break;
   }
 
   return true;  
@@ -199,8 +220,10 @@ bool BarBot::loop()
 {
   instruction *cmd = &_instructions[_current_instruction];
   bool done = false;
+  bool limit_switch_hit = false;
   
   _stepper->run();
+  glass_present();
     
   for (int ix=1; ix < DISPENSER_COUNT; ix++)
     if (_dispeners[ix] != NULL)
@@ -210,23 +233,35 @@ bool BarBot::loop()
 
   _stepper->run();
   
-  // Double check - if the limit switch is ever hit, always stop the platform
-  if 
-  ((
-    (digitalRead(ZERO_SWITCH) == LOW) &&   // Limit switch hit
-    (_stepper_target < MAX_RAIL_POSITION) &&               // We're not aiming for it
-    (millis()-_move_start > 250) &&        // Current move has been in progress for a while (i.e. plenty of time to have moved off the limit switch)
-    (_state != BarBot::FAULT)              // We've not already faulted.
-  ) ||
-  ( 
+  // If the limit switch is hit, stop the platform, unless
+  // only just started moving away from the limit switch
+    if 
+  (
     (digitalRead(ZERO_SWITCH) == LOW) &&
-    (_stepper->distanceToGo() > 15) &&
-    (_state != BarBot::FAULT) &&
-    (millis()-_move_start > 250) 
-  ))
+    (
+      (_stepper->targetPosition() > _stepper->currentPosition()) || // trying to move towards/beyond the limit switch, or
+      (millis()-_move_start > 250)                                  // move has been in progress long enough to have moved off limit switch
+    )
+  )
   {
-    debug("Error: limit switch unexpectedly hit!");
-    set_state(BarBot::FAULT);
+    limit_switch_hit = true;
+    
+    // If we're either zeroing (target=RESET_POSITION), or moving to the end of the rail, reset the home position
+    if ((_stepper_target == RESET_POSITION) || ((_stepper_target==MAX_RAIL_POSITION) && (_stepper->distanceToGo() < 100)))
+    {
+      _stepper->setCurrentPosition(MAX_RAIL_POSITION);
+      _stepper->stop();
+      _stepper->disableOutputs();
+    } else
+    {
+      _stepper->stop();
+      _stepper->disableOutputs();
+      if (_state != BarBot::FAULT)
+      {
+        debug("Error: limit switch unexpectedly hit!");
+        set_state(BarBot::FAULT);
+      }
+    }
   }
   
   _stepper->run();
@@ -283,8 +318,19 @@ bool BarBot::loop()
       case DISPENSE:
         if (_dispeners[cmd->param1] != NULL)
         {
+          // If dispening from a dasher, animate the neopixel ring
+          if (cmd->param1 == DISPENSER_DASHER0)
+            dasher_wheel(NEO_DASHER0);
+          else if (cmd->param1 == DISPENSER_DASHER1)
+            dasher_wheel(NEO_DASHER1);
+          else if (cmd->param1 == DISPENSER_DASHER2)
+            dasher_wheel(NEO_DASHER2);
           if (_dispeners[cmd->param1]->get_status() == CDispenser::IDLE)
+          {
+            if (_dispeners[cmd->param1]->get_dispener_type() == CDispenser::DISPENSER_DASHER)
+              set_neo_colour(_state); // restore previous colour
             done = true;
+          }
         } else
           done = true;
         break;
@@ -297,29 +343,26 @@ bool BarBot::loop()
       case ZERO:
         if (digitalRead(ZERO_SWITCH) == LOW)
         {
-          done = true;
           _stepper->stop();
+          _stepper->disableOutputs();
           _stepper->setCurrentPosition(MAX_RAIL_POSITION);
-          // _stepper->disableOutputs();
-          _stepper->setMaxSpeed(SPEED_NORMAL);
+          done = true;
         } 
         else if (_stepper->distanceToGo() == 0)
         {
           debug("FAULT: distanceToGo=0 whilst zeroing!");
           set_state(BarBot::FAULT);
-          _stepper->setMaxSpeed(SPEED_NORMAL);
         }
         else if (millis()-_move_start > MAX_MOVE_TIME)
         {
           debug("FAULT: ZERO timeout");
           set_state(BarBot::FAULT);
-          _stepper->setMaxSpeed(SPEED_NORMAL);
         }
         break;
 
 	  case DISPLAYNUM :
         done = !_display->isBusy();
-		break;
+        break;
     }
   
     _stepper->run();
@@ -341,6 +384,7 @@ bool BarBot::loop()
 
 void BarBot::set_state(barbot_state new_state)
 {  
+  static bool first_run = true;
   if (new_state == BarBot::FAULT)
   {
     debug("FAULT.");
@@ -369,13 +413,32 @@ void BarBot::set_state(barbot_state new_state)
     return;
   }   
   
+  if ((_state != new_state) || first_run)
+  {
   _state = new_state;  
+    first_run = false;
+    
+    set_neo_colour(new_state);
+  }
 }
 
 void BarBot::move_to(long pos)
 {
+  move_to(pos, false);
+}
+
+void BarBot::move_to(long pos, bool force)
+{
+  // Sanity check - if emergency stop pressed, don't start moving
+  if (digitalRead(ESTOP_PIN) == HIGH)
+  {
+    _stepper->stop();
+    _stepper->disableOutputs();
+    debug("move: fail - ESTOP");
+    return;
+  }
   char buf[30]="";
-  if (pos > MAX_RAIL_POSITION)
+  if (!force && (pos > MAX_RAIL_POSITION))
   {
     pos = MAX_RAIL_POSITION;
     debug("Excessive rail position");
@@ -395,22 +458,96 @@ BarBot::barbot_state BarBot::get_state()
    
 bool BarBot::glass_present()
 {
-  return true;
+  static uint8_t delay;
+  static int last_state;
+  static int glass_state;
+  static unsigned long long last_state_change;
+  int current_state;
   
+  if (last_state_change==0)
+    glass_state = digitalRead(GLASS_SENSE_PIN);
   
+  if (delay++ != 0)
+    return glass_state;
 
-  if (digitalRead(GLASS_SENSE_PIN) == LOW)
+  current_state = digitalRead(GLASS_SENSE_PIN);
+
+  if (current_state != last_state)
+    last_state_change = millis();
+
+  if ((millis() - last_state_change) > 100) 
   {
-    return false;
+    if (current_state != glass_state)
+      glass_state = current_state;
   }
-  else
+  last_state = current_state;
+  return (glass_state==HIGH ? true : false);
+}
+
+void BarBot::color_wipe(uint32_t c)
   {
-    return true;
+  color_wipe(c, NEO_DASHER0);
+  color_wipe(c, NEO_DASHER1);
+  color_wipe(c, NEO_DASHER2);
   }
+void BarBot::color_wipe(uint32_t c, uint8_t dasher)
+{
+  for(uint16_t i=dasher; (i<_dasher_neo->numPixels()) && (i < dasher+24); i++) 
+    _neo_buf[i] = c;
 }
    
+void BarBot::dasher_wheel(uint8_t dasher)
+{
+  static uint8_t pos = 0;
+  static unsigned long last_update;
+  
+  if (dasher+24 > sizeof(_neo_buf))
+    return;
+  
+  if (millis()-last_update > 10)
+  {
+    _neo_buf[pos+dasher] = _dasher_neo->Color(0,100,0);     // Green
+    pos = (pos+1)%24;
+    _neo_buf[pos+dasher] = _dasher_neo->Color(255,255,255); // White
+    refresh_neo();
+    last_update = millis();
+  }
+}
+
+void BarBot::set_neo_colour(barbot_state state)
+{
+  // Change dasher new pixel rings colour
+  switch (state)
+  {
+    case BarBot::IDLE:
+      color_wipe(_dasher_neo->Color(100,100,100)); // white
+      break;
+
+    case BarBot::WAITING:
+      color_wipe(_dasher_neo->Color(100,100,0));  // yellow
+      break;
+
+    case BarBot::RUNNING:
+      color_wipe(_dasher_neo->Color(0,100,0));    // green
+      break;
+
+    case BarBot::FAULT:
+      color_wipe(_dasher_neo->Color(100,0,0));    // red
+      break;
+  }
+  refresh_neo();
+}
+
+void BarBot::refresh_neo()
+{
+  for(uint16_t i=0; ((i <_dasher_neo->numPixels()) && (i < sizeof(_neo_buf))); i++)
+    _dasher_neo->setPixelColor(i, _neo_buf[i]);
+  _dasher_neo->show();
+}
    void debug(char *msg)
 {
   Serial.println(msg);
+  Serial2.print("I ");
+  Serial2.println(msg);
 }
 

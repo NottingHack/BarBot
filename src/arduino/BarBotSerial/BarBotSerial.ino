@@ -75,7 +75,7 @@ void process_message(char *msg)
   }
   
   state = bb->get_state();
-  if (state == BarBot::RUNNING)
+  if ((state == BarBot::RUNNING) && (instruction != 'R'))
   {
     Serial.println("Error - barbot is busy");
     return;
@@ -114,15 +114,17 @@ void process_message(char *msg)
       break;
       
     case 'Z':  // Zero
-      bb->instructions_clear();
+      Serial.println(F("Zero ins"));
+      //bb->instructions_clear();
       bb->instruction_add(BarBot::ZERO, 0, 0);  
-      bb->go();
+      //bb->go();
+      break;
 	  break;
     
 	case 'O': // Order number
 	  bb->instruction_add(BarBot::DISPLAYNUM, param1, 0);
 	  break;
-
+     
     default:
       Serial.println("Unexpected instruction!");
       return;
