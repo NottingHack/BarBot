@@ -13,7 +13,7 @@ AccelStepper stepper(AccelStepper::DRIVER);
 #define NEO5_PIN 12
 
 Adafruit_NeoPixel strip0 = Adafruit_NeoPixel(72,NEO0_PIN,NEO_GRB+NEO_KHZ800);
-Adafruit_NeoPixel strip1 = Adafruit_NeoPixel(1,NEO1_PIN,NEO_GRB+NEO_KHZ800);
+Adafruit_NeoPixel strip1 = Adafruit_NeoPixel(6,NEO1_PIN,NEO_GRB+NEO_KHZ800);
 Adafruit_NeoPixel strip2 = Adafruit_NeoPixel(24,NEO2_PIN,NEO_GRB+NEO_KHZ800);
 Adafruit_NeoPixel strip3 = Adafruit_NeoPixel(24,NEO3_PIN,NEO_GRB+NEO_KHZ800);
 Adafruit_NeoPixel strip4 = Adafruit_NeoPixel(24,NEO4_PIN,NEO_GRB+NEO_KHZ800);
@@ -24,7 +24,7 @@ Servo servoOptic0;
 Servo servoOptic1; 
 Servo servoOptic2; 
 Servo servoOptic3; 
-Servo servoOptic4; 
+Servo servoOptic4;  
 Servo servoOptic5; 
 
 Servo servoMixer0; 
@@ -35,7 +35,8 @@ Servo servoMixer4;
 Servo servoMixer5; 
 
 void colorWipe0(uint32_t c, uint8_t wait);
-void colorWipe1(uint32_t c, uint8_t wait);
+void colorWipe1(void);
+void colorWipe2(void);
 void rainbowCycle(uint8_t wait);
 uint32_t Wheel(byte WheelPos);
 
@@ -185,25 +186,23 @@ void serialEvent()
     case 'A':
     case 'a':
      colorWipe0(strip0.Color(255,0,0),10); // red
-     colorWipe1(strip1.Color(255,0,0),10); // red
+     colorWipe1(); 
      break;
 
     case 'B':
     case 'b':
      colorWipe0(strip0.Color(0,255,0),10); // green
-     colorWipe1(strip1.Color(0,255,0),10); // green
+     colorWipe2(); 
      break;
 
     case 'C':
     case 'c':
      colorWipe0(strip0.Color(0,0,255),10); // blue
-     colorWipe1(strip1.Color(0,0,255),10); // blue
      break;
      
     case 'D':
     case 'd':
      colorWipe0(strip0.Color(255,255,255),10); // white
-     colorWipe1(strip1.Color(255,255,255),10); // white
      break;
 
     case 'E':
@@ -214,7 +213,6 @@ void serialEvent()
     case 'F':
     case 'f':
      colorWipe0(strip0.Color(0,0,0),10); // off
-     colorWipe1(strip1.Color(0,0,0),10); // off
      break;
 
 // Servo tests     
@@ -414,17 +412,29 @@ void colorWipe0(uint32_t c, uint8_t wait)
   strip0.show();
 }
 
-void colorWipe1(uint32_t c, uint8_t wait) 
+void colorWipe1(void) 
 {
-  for(uint16_t i=0; i<strip1.numPixels(); i++) 
-    strip1.setPixelColor(i, c);
+  strip1.setPixelColor(0,strip1.Color(255,0,0));
+  strip1.setPixelColor(1,strip1.Color(0,255,0));
+  strip1.setPixelColor(2,strip1.Color(0,0,255));
+  strip1.setPixelColor(3,strip1.Color(255,255,0));
+  strip1.setPixelColor(4,strip1.Color(0,255,255));
+  strip1.setPixelColor(5,strip1.Color(255,0,255));
+
+  strip1.show();
+}
+
+void colorWipe2(void) 
+{
+  for(int i=0;i<6;i++)
+    strip1.setPixelColor(i,strip1.Color(255,255,255));
 
   strip1.show();
 }
 
 void rainbowCycle(uint8_t wait) 
 {
-  uint16_t i, j;
+  uint16_t i;
 
   for(i=0; i< strip0.numPixels(); i++) 
     strip0.setPixelColor(i, Wheel((i * 256 / strip0.numPixels()) & 255));
