@@ -5,11 +5,16 @@ BarBot::BarBot()
   Serial3.begin(9600);
   // Dasher neopixel rings
   _dasher_neo = new Adafruit_NeoPixel(72,NEO0_PIN,NEO_GRB+NEO_KHZ800);
+  _optic_neo = new Adafruit_NeoPixel(6,NEO1_PIN,NEO_GRB+NEO_KHZ800);
   _dasher_neo->begin();
-  _dasher_neo->show(); // Initialize all pixels to 'off'
+  _optic_neo->begin();
+  _optic_neo->show(); // Initialize all pixels to 'off'
+  _dasher_neo->show();
   memset(_neo_buf, 0, sizeof(_neo_buf));
   color_wipe(_dasher_neo->Color(100,100,100)); // white
   refresh_neo();
+  optic_neo(-1); // None dispening
+  
   memset(_instructions, NOP, sizeof(_instructions));
   _instruction_count = 0;
   
@@ -190,11 +195,15 @@ bool BarBot::exec_instruction(uint16_t ins)
       _stepper->setMaxSpeed(SPEED_NORMAL);
       move_to(cmd->param1);
       _stepper->run();
+      Serial3.print('0'); // Switch platform neopixel to Auto
       break;
 
     case DISPENSE:
       if (_dispeners[cmd->param1] != NULL)
+      {
         _dispeners[cmd->param1]->dispense(cmd->param2); // nb. instruction_add validated that param1 was in bounds.
+        Serial3.print('W'); // Platform neopixel to White whilst dispening
+       }
      break;
 
     case WAIT:
@@ -212,7 +221,17 @@ bool BarBot::exec_instruction(uint16_t ins)
       break;
   }
 
-  return true;  
+  // If we're not dispening from an optic, make sure no particular optic is highlighted
+  if 
+  (
+    (cmd->type != DISPENSE) ||
+    ((cmd->type == DISPENSE) && (cmd->param2 <= DISPENSER_OPTIC5))
+  )
+  {
+    optic_neo(-1);
+  }
+
+  return true;
 }
 
 // Needs to be called regulary whilst barbot is in action!
@@ -318,6 +337,14 @@ bool BarBot::loop()
       case DISPENSE:
         if (_dispeners[cmd->param1] != NULL)
         {
+          
+          
+          // If dispening from an optic, change the colour of the neopixel above the optic
+          if (_dispeners[cmd->param1]->get_dispener_type() == CDispenser::DISPENSER_OPTIC)
+          {
+            optic_neo((cmd->param1) - 1); // Neopixels are 0-6 for optic/dispenser id's 1-7
+          }
+            
           // If dispening from a dasher, animate the neopixel ring
           if (cmd->param1 == DISPENSER_DASHER0)
             dasher_wheel(NEO_DASHER0);
@@ -385,6 +412,9 @@ bool BarBot::loop()
 void BarBot::set_state(barbot_state new_state)
 {  
   static bool first_run = true;
+  
+  Serial3.print('0');
+  
   if (new_state == BarBot::FAULT)
   {
     debug("FAULT.");
@@ -521,21 +551,47 @@ void BarBot::set_neo_colour(barbot_state state)
   {
     case BarBot::IDLE:
       color_wipe(_dasher_neo->Color(100,100,100)); // white
+      optic_neo(-1); // None dispening
       break;
 
     case BarBot::WAITING:
       color_wipe(_dasher_neo->Color(100,100,0));  // yellow
+      optic_neo(-1); // None dispening
       break;
 
     case BarBot::RUNNING:
       color_wipe(_dasher_neo->Color(0,100,0));    // green
+      optic_neo(-1); // None dispening
       break;
 
     case BarBot::FAULT:
       color_wipe(_dasher_neo->Color(100,0,0));    // red
+      optic_neo(-2); 
       break;
   }
   refresh_neo();
+}
+
+/* Highlight <active_optic> optic in a different colour */
+void BarBot::optic_neo(int active_optic)
+{
+  for(uint16_t i=0; i <_optic_neo->numPixels(); i++)
+  {
+    if (active_optic == -2)
+    {
+      _optic_neo->setPixelColor(i, _optic_neo->Color(255,0,0)); // red
+    } else
+    {
+      if (i == active_optic)
+      {
+        _optic_neo->setPixelColor(i, _optic_neo->Color(255,255,255));
+      } else
+      {
+        _optic_neo->setPixelColor(i, _optic_neo->Color(0,0,100));
+      }
+    }
+  }
+  _optic_neo->show();
 }
 
 void BarBot::refresh_neo()
@@ -550,4 +606,3 @@ void BarBot::refresh_neo()
   Serial2.print("I ");
   Serial2.println(msg);
 }
-

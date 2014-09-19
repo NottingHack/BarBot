@@ -36,7 +36,8 @@
 #define MAX_ACCEL           3000
 #define GLASS_SENSE_PIN       15 
 #define PLATFORM_TX           14
-#define NEO0_PIN               7
+#define NEO0_PIN               7 // Dasher neopixel
+#define NEO1_PIN               8 // Optic neopixel
 
 #define NEO_DASHER0   0
 #define NEO_DASHER1  24
@@ -115,6 +116,7 @@ class BarBot
     void refresh_neo();
     void dasher_wheel(uint8_t dasher);
     void set_neo_colour(barbot_state state);
+    void optic_neo(int active_optic);
     
     barbot_state _state;
     instruction _instructions[MAX_INSTRUCTIONS];
@@ -123,11 +125,12 @@ class BarBot
     unsigned long long _wait_inst_start;
     unsigned long long _move_start;
     AccelStepper *_stepper;
-	CDisplay *_display;
+    CDisplay *_display;
     long _stepper_target;
     CDispenser *_dispeners[DISPENSER_COUNT];
     bool glass_present();
     Adafruit_NeoPixel *_dasher_neo;
+    Adafruit_NeoPixel *_optic_neo;
     uint32_t _neo_buf[96];
 };
 
