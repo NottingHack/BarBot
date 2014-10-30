@@ -13,7 +13,7 @@ BarBot::BarBot()
   memset(_neo_buf, 0, sizeof(_neo_buf));
   color_wipe(_dasher_neo->Color(100,100,100)); // white
   refresh_neo();
-  optic_neo(-1); // None dispening
+  optic_neo(DISPENSER_OPTIC_NONE); // None dispening
   
   memset(_instructions, NOP, sizeof(_instructions));
   _instruction_count = 0;
@@ -228,7 +228,7 @@ bool BarBot::exec_instruction(uint16_t ins)
     ((cmd->type == DISPENSE) && (cmd->param2 <= DISPENSER_OPTIC5))
   )
   {
-    optic_neo(-1);
+    optic_neo(DISPENSER_OPTIC_NONE);
   }
 
   return true;
@@ -551,33 +551,34 @@ void BarBot::set_neo_colour(barbot_state state)
   {
     case BarBot::IDLE:
       color_wipe(_dasher_neo->Color(100,100,100)); // white
-      optic_neo(-1); // None dispening
+      optic_neo(DISPENSER_OPTIC_NONE); // None dispening
       break;
 
     case BarBot::WAITING:
       color_wipe(_dasher_neo->Color(100,100,0));  // yellow
-      optic_neo(-1); // None dispening
+      optic_neo(DISPENSER_OPTIC_NONE); // None dispening
       break;
 
     case BarBot::RUNNING:
       color_wipe(_dasher_neo->Color(0,100,0));    // green
-      optic_neo(-1); // None dispening
+      optic_neo(DISPENSER_OPTIC_NONE); // None dispening
       break;
 
     case BarBot::FAULT:
       color_wipe(_dasher_neo->Color(100,0,0));    // red
-      optic_neo(-2); 
+      optic_neo(DISPENSER_OPTIC_FAULT); 
       break;
   }
   refresh_neo();
 }
 
 /* Highlight <active_optic> optic in a different colour */
+/* Nb. DISPENSER_OPTIC_NONE won't match any neopixel, so results in all being set to white */
 void BarBot::optic_neo(int active_optic)
 {
   for(uint16_t i=0; i <_optic_neo->numPixels(); i++)
   {
-    if (active_optic == -2)
+    if (active_optic == DISPENSER_OPTIC_FAULT)
     {
       _optic_neo->setPixelColor(i, _optic_neo->Color(255,0,0)); // red
     } else

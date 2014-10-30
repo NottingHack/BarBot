@@ -65,6 +65,10 @@
 #define DISPENSER_STIRRER   19
 #define DISPENSER_UMBRELLA  20
 
+// Dummy optic values for controlling the neopixels above them
+#define DISPENSER_OPTIC_NONE  -1  // Not currently dispencing from an optic
+#define DISPENSER_OPTIC_FAULT -2  // Turn all neopixels red to indicate something bad has heppened.
+
 void debug(char *msg);
 
 
