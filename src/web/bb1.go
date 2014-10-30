@@ -649,17 +649,37 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
       cmdlist = append(cmdlist, "G") // Go
 
     case "dispense":
-      BarbotSerialChan <- adminControlDispenser(w, r, param)
-      http.Redirect(w, r, "/admin/control/", http.StatusSeeOther)
-      return
+      var dispenser_id int
+      var dispenser_param int
       
+      ret, err := fmt.Sscanf(param[len("dispense/"):], "%d/%d", &dispenser_id, &dispenser_param)
+      if err != nil || ret != 2 {
+        return
+      }
+      cmdlist[0] = "C"
+      cmdlist = append(cmdlist, fmt.Sprintf("D %d %d", dispenser_id, dispenser_param))
+      cmdlist = append(cmdlist, "G")
+
+    case "md": // Move then dispense
+      var dispenser_id int
+      var dispenser_param int
+      var rail_position int
+      
+      ret, err := fmt.Sscanf(param[len("md/"):], "%d/%d/%d", &rail_position, &dispenser_id, &dispenser_param)
+      if err != nil || ret != 3 {
+        return
+      }
+      cmdlist[0] = "C"
+      cmdlist = append(cmdlist, fmt.Sprintf("M %d", rail_position)) // Move to rail position nnnn
+      cmdlist = append(cmdlist, fmt.Sprintf("D %d %d", dispenser_id, dispenser_param)) // Dispense from <dispenser_id> with param <dispenser_param>
+      cmdlist = append(cmdlist, "G")
+
     default:
       sendmsg = false
   }
 
   if (sendmsg) {
     BarbotSerialChan <- cmdlist
-    http.Redirect(w, r, "/admin/control/", http.StatusSeeOther)
     return
   }
 
@@ -694,28 +714,6 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
   tmpl.ExecuteTemplate(w, "admin_control", control)
   tmpl.ExecuteTemplate(w, "admin_footer" , nil)
   return
-}
-
-// adminControlDispenser returns a set up commands to dispense from the selected dispenser
-func adminControlDispenser(w http.ResponseWriter, r *http.Request, param string) ([]string) {
-  r.ParseForm()
-  
-  dispenser_id, err := strconv.Atoi(r.Form.Get("dispense"))
-  if err != nil {
-    return nil
-  }
-  
-  d_param, err := strconv.Atoi(r.Form.Get(r.Form.Get("dispense")))
-  if err != nil {
-    return nil
-  }
-  
-  commandList := make([]string, 3)
-  commandList[0] = "C"
-  commandList[1] = fmt.Sprintf("D %d %d", dispenser_id, d_param)
-  commandList[2] = "G"
-  
-  return commandList
 }
 
 func adminMenu(w http.ResponseWriter, r *http.Request, param string) {

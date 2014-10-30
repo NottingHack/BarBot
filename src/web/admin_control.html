@@ -1,31 +1,82 @@
 {{define "admin_control"}}
 
-    <a href="/admin/control/reset" class="btn btn-default btn-lg" role="button">Reset</a>
-    <a href="/admin/control/zero"  class="btn btn-default btn-lg" role="button">Zero</a>
+    <button type="button" name="reset" onclick="control('reset')" class="btn btn-default btn-lg">Reset</button>
+    <button type="button" name="zero"  onclick="control('zero')"  class="btn btn-default btn-lg">Zero </button>
+
     <br />
     <br />
     
-    <form role="form" action="/admin/control/dispense" class="navbar-form navbar-left" method="post"> 
-      <table class="table">
-      <tr>
-        <td>Dispenser</td>
-        <td>Move to</td>
-        <td>Param</td>
-        <td>Dispense</td>
-        <td>Ingrediant<td>
-      </tr>
-      
-      {{range .Dispensers}}
-      <tr>
-        <td>{{.Name}}</td>
-        <td><a href="/admin/control/move/{{.Rail_position}}" class="btn btn-default btn-lg" role="button">Move</a></td>
-        <td><input type="text" name="{{.Id}}" class="form-control" value="1"></td>
-        <td><button type="submit" name="dispense" value="{{.Id}}" class="btn btn-default btn-lg">Dispense</button></td>
-        <td>{{.Ingredient}}</td>
-      </tr>
-      {{end}}
-      
-      </table>
-    </form>
+    <table class="table">
+    <tr>
+      <td>Dispenser</td>
+      <td>Move to</td>
+      <td>Param</td>
+      <td>Dispense</td>
+      <td>Move then dispense</td>
+      <td>Ingrediant<td>
+    </tr>
+    
+    {{range .Dispensers}}
+    <tr>
+      <td>{{.Name}}</td>
+      <td><button type="button" name="move" onclick="move({{.Rail_position}})" class="btn btn-default btn-lg">Move</button></td>
+      <td><input type="text" name="D{{.Id}}" id="D{{.Id}}" class="form-control" value="1"></td>
+      <td><button type="button" name="dispense" onclick="dispense({{.Id}})" class="btn btn-danger btn-lg">Dispense</button></td>
+      <td><button type="button" name="md" onclick="moveDispense({{.Id}}, {{.Rail_position}})" class="btn btn-success btn-lg">Move &amp; Dispense</button></td>
+      <td>{{.Ingredient}}</td>
+    </tr>
+    {{end}}
+
+    </table>
+
+    <script>
+      function dispense(id)
+      {
+        var xmlhttp;
+        if (window.XMLHttpRequest)
+        {
+          xmlhttp=new XMLHttpRequest();
+        }
+
+        xmlhttp.open("GET","/admin/control/dispense/" + id + "/" + document.getElementsByName('D' + id)[0].value,true);
+        xmlhttp.send();
+      }
+
+      function moveDispense(id, railPosition)
+      {
+        var xmlhttp;
+        if (window.XMLHttpRequest)
+        {
+          xmlhttp=new XMLHttpRequest();
+        }
+
+        xmlhttp.open("GET","/admin/control/md/" + railPosition + "/" + id + "/" + document.getElementsByName('D' + id)[0].value,true);
+        xmlhttp.send();
+      }
+
+      function move(railPosition)
+      {
+        var xmlhttp;
+        if (window.XMLHttpRequest)
+        {
+          xmlhttp=new XMLHttpRequest();
+        }
+
+        xmlhttp.open("GET","/admin/control/move/" + railPosition, true);
+        xmlhttp.send();
+      }
+
+      function control(cmd)
+      {
+        var xmlhttp;
+        if (window.XMLHttpRequest)
+        {
+          xmlhttp=new XMLHttpRequest();
+        }
+
+        xmlhttp.open("GET","/admin/control/" + cmd, true);
+        xmlhttp.send();
+      }
+    </script>  
 
 {{end}}
