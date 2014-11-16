@@ -81,6 +81,18 @@ void CDasher::stop()
   _state = CDasher::IDLE;
 }
 
+// Switch dasher on. Should only be called when in maintenance mode
+void CDasher::maint_dasher_on()
+{
+  digitalWrite(_pin_driver, HIGH);  
+}
+
+void CDasher::maint_dasher_off()
+{
+  digitalWrite(_pin_driver, LOW);  
+}
+
+
 CDispenser::dispenser_state CDasher::get_status()
 {
   return _state;

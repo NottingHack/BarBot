@@ -2,6 +2,7 @@
 
 BarBot::BarBot()
 {
+  wdt_disable();
   Serial3.begin(9600);
   // Dasher neopixel rings
   _dasher_neo = new Adafruit_NeoPixel(72,NEO0_PIN,NEO_GRB+NEO_KHZ800);
@@ -41,13 +42,13 @@ BarBot::BarBot()
       case DISPENSER_DASHER1:  _dispeners[ix]  = new CDasher(24, 25);  break; // Dasher1
       case DISPENSER_DASHER2:  _dispeners[ix]  = new CDasher(26, 27);  break; // Dasher2
         
-      case DISPENSER_SYRINGE:  _dispeners[ix]  = new CSyringe(5,6);    break;  // Syringe
+      case DISPENSER_SYRINGE:  _dispeners[ix]  = new CSyringe(5,6);     break;  // Syringe
         
       case DISPENSER_CONVEYOR: _dispeners[ix]  = new CConveyor(38, 39); break;  // Conveyor
         
-      case DISPENSER_SLICE: _dispeners[ix]     = new CSlice(34);        break;  // Slice dispenser
+      case DISPENSER_SLICE:    _dispeners[ix]  = new CSlice(34);        break;  // Slice dispenser
         
-      case DISPENSER_STIRRER: _dispeners[ix]   = new CStirrer(36);      break;  // Stirrer
+      case DISPENSER_STIRRER:  _dispeners[ix]  = new CStirrer(36);      break;  // Stirrer
         
       case DISPENSER_UMBRELLA: _dispeners[ix]  = new CUmbrella(32);     break;  // Umbrella
     }
@@ -87,6 +88,7 @@ BarBot::BarBot()
 
   //pinMode(PLATFORM_TX, OUTPUT);
   //digitalWrite(PLATFORM_TX, LOW);
+  Serial3.print('0'); // Switch platform neopixel to Auto    
 }
 
 BarBot::~BarBot()
@@ -240,15 +242,23 @@ bool BarBot::loop()
   instruction *cmd = &_instructions[_current_instruction];
   bool done = false;
   bool limit_switch_hit = false;
-  
-  _stepper->run();
-  glass_present();
+
+
+  if (_state != BarBot::MAINT) // platform is disabled in maintenance mode.
+  {
+    _stepper->run();
+    glass_present();
+  }
     
   for (int ix=1; ix < DISPENSER_COUNT; ix++)
     if (_dispeners[ix] != NULL)
     {
       _dispeners[ix]->loop();
     }
+
+  // If in maintenance mode, there's nothing else to do.
+  if (_state == BarBot::MAINT)
+    return false;
 
   _stepper->run();
   
@@ -415,6 +425,14 @@ void BarBot::set_state(barbot_state new_state)
   
   Serial3.print('0');
   
+  // Because maintenance mode does weird things, the only way out at the moment
+  // is a (potentially soft) reset.
+  if (new_state == BarBot::MAINT)
+  {
+    debug("ERROR: In maint mode");
+    return;
+  }
+  
   if (new_state == BarBot::FAULT)
   {
     debug("FAULT.");
@@ -563,6 +581,11 @@ void BarBot::set_neo_colour(barbot_state state)
       color_wipe(_dasher_neo->Color(0,100,0));    // green
       optic_neo(DISPENSER_OPTIC_NONE); // None dispening
       break;
+      
+    case BarBot::MAINT:
+      color_wipe(_dasher_neo->Color(255,0,255));    // purple
+      optic_neo(DISPENSER_OPTIC_NONE); // None dispening
+      break;      
 
     case BarBot::FAULT:
       color_wipe(_dasher_neo->Color(100,0,0));    // red
@@ -588,7 +611,7 @@ void BarBot::optic_neo(int active_optic)
         _optic_neo->setPixelColor(i, _optic_neo->Color(255,255,255));
       } else
       {
-        _optic_neo->setPixelColor(i, _optic_neo->Color(0,0,100));
+        _optic_neo->setPixelColor(i, _optic_neo->Color(0,0,255));
       }
     }
   }
@@ -601,9 +624,110 @@ void BarBot::refresh_neo()
     _dasher_neo->setPixelColor(i, _neo_buf[i]);
   _dasher_neo->show();
 }
-   void debug(char *msg)
+
+void debug(char *msg)
 {
   Serial.println(msg);
   Serial2.print("I ");
   Serial2.println(msg);
 }
+
+// Enter maintenance mode
+bool BarBot::maint_mode_enter()
+{
+  if (_state != BarBot::IDLE)
+  {
+    debug("Not idle!");
+    return false;
+  }
+  
+  set_state(BarBot::FAULT); // Going though the FAULT state should ensure all dispensers are stopped
+  set_state(BarBot::MAINT);
+  
+  Serial3.print('Z'); // Switch off platform neopixels
+  _stepper->stop();
+  _stepper->disableOutputs();
+  return (_state == BarBot::MAINT);
+}
+
+bool BarBot::maint_mode_leave()
+{
+  // The easiest way to get back into a known state is just to reset
+  wdt_enable(WDTO_2S); // Watchdog abuse...
+  while(1);
+  return false;
+}
+
+// Optic maintenance
+// param=0 - all optics to idle. param=9 - all optics to dispense position.
+void BarBot::maint_mode_optics(uint8_t param)
+{
+  switch (param)
+  {
+    case 0:
+      for (int ix=1; ix < DISPENSER_COUNT; ix++)
+      {
+        if (_dispeners[ix]->get_dispener_type() == CDispenser::DISPENSER_OPTIC)       
+          ((COptic*)_dispeners[ix])->move_to_idle();
+      }
+      break;
+    
+    case 9:
+      for (int ix=1; ix < DISPENSER_COUNT; ix++)
+      {
+        if (_dispeners[ix]->get_dispener_type() == CDispenser::DISPENSER_OPTIC)       
+          ((COptic*)_dispeners[ix])->move_to_dispense();
+      }
+      break;
+      
+    default:
+      break;
+  }
+  
+}
+
+// Mixer maintenance
+// param=0 - all mixers to idle. param=9 - all mixers to dispense position.
+void BarBot::maint_mode_mixers(uint8_t param)
+{
+  switch (param)
+  {
+    case 0:
+      for (int ix=1; ix < DISPENSER_COUNT; ix++)
+      {
+        if (_dispeners[ix]->get_dispener_type() == CDispenser::DISPENSER_MIXER)       
+          ((CMixer*)_dispeners[ix])->move_to_idle();
+      }
+      break;
+    
+    case 9:
+      for (int ix=1; ix < DISPENSER_COUNT; ix++)
+      {
+        if (_dispeners[ix]->get_dispener_type() == CDispenser::DISPENSER_MIXER)       
+          ((CMixer*)_dispeners[ix])->move_to_dispense();
+      }
+      break;
+      
+    default:
+      break;
+  }
+}
+
+void BarBot::maint_mode_dasher_on(uint8_t dasher)
+{
+  // There are three dashers, so dasher must be 0-2
+  if (dasher > 2)
+    return;
+  
+  ((CDasher*)_dispeners[DISPENSER_DASHER0+dasher])->maint_dasher_on();
+}
+
+void BarBot::maint_mode_dasher_off(uint8_t dasher)
+{
+  // There are three dashers, so dasher must be 0-2
+  if (dasher > 2)
+    return;
+  
+  ((CDasher*)_dispeners[DISPENSER_DASHER0+dasher])->maint_dasher_off();
+}
+

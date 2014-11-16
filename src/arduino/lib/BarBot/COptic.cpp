@@ -85,6 +85,28 @@ void COptic::stop()
   _state = COptic::IDLE; 
 }
 
+// Move to idle postion. Important: Should only ever be called when in maintenance mode.
+void COptic::move_to_idle()
+{
+  if (!_attached)
+  {
+    _servo.attach(_servo_pin);
+    _attached = true;
+  }  
+  _servo.write(_closed_pos);  
+}
+
+// Move to dispense postion. Important: Should only ever be called when in maintenance mode.
+void COptic::move_to_dispense()
+{
+  if (!_attached)
+  {
+    _servo.attach(_servo_pin);
+    _attached = true;
+  }  
+  _servo.write(_open_pos);  
+}
+
 CDispenser::dispenser_state COptic::get_status()
 {
   return _state;

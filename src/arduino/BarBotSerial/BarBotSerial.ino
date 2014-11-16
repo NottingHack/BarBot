@@ -5,6 +5,14 @@
 
 #define SERIAL_IN_BUF 50
 
+// Maintenance commands param1.            param2 meaning
+#define MAINTENANCE_MODE        0       // 0=leave maint mode, 1=enter maint. mode
+#define MAINTENANCE_OPTICS      1       // 0=all optics to idle, 9=all optics dispense
+#define MAINTENANCE_MIXERS      2       // 0=all mixers to idle, 9=all mixers dispense
+#define MAINTENANCE_DASHER_ON   3       // switch dasher n (0-2) on
+#define MAINTENANCE_DASHER_OFF  4       // switch dasher n (0-2) off
+
+
 void process_message(char *msg);
 void process_serial();
 
@@ -115,15 +123,51 @@ void process_message(char *msg)
       
     case 'Z':  // Zero
       Serial.println(F("Zero ins"));
-      //bb->instructions_clear();
       bb->instruction_add(BarBot::ZERO, 0, 0);  
-      //bb->go();
       break;
-	  break;
     
-	case 'O': // Order number
-	  bb->instruction_add(BarBot::DISPLAYNUM, param1, 0);
-	  break;
+    case 'O': // Order number
+      bb->instruction_add(BarBot::DISPLAYNUM, param1, 0);
+      break;
+      
+    case 'A': // mAintenance mode (Because M is already used...)
+      // param1 = function, param2 = option
+      if (ret < 2)
+      {
+        Serial.println(F("Error: parameter missing for Maint command"));
+        return;
+      }
+      
+      switch (param1)
+      {
+        case MAINTENANCE_MODE:
+          if (param2 == 0)
+            bb->maint_mode_leave();
+          else if (param2 == 1)
+            bb->maint_mode_enter();
+          break;
+          
+        case MAINTENANCE_OPTICS:
+          bb->maint_mode_optics(param2);
+          break;
+          
+        case MAINTENANCE_MIXERS:
+          bb->maint_mode_mixers(param2);
+          break;
+          
+        case MAINTENANCE_DASHER_ON:
+          bb->maint_mode_dasher_on(param2);
+          break;
+          
+        case MAINTENANCE_DASHER_OFF:
+          bb->maint_mode_dasher_off(param2);
+          break;
+          
+        default:
+          Serial.println("Unexpected maint. param!");
+          return;
+          break;
+      }
      
     default:
       Serial.println("Unexpected instruction!");

@@ -23,6 +23,8 @@ class COptic : public CDispenser
      bool             loop();
      dispenser_state  get_status();
      void             stop();
+     void             move_to_idle();
+     void             move_to_dispense();
      
   private:
     Servo _servo;

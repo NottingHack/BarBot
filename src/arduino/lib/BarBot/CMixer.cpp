@@ -79,6 +79,28 @@ void CMixer::stop()
   _state = CMixer::IDLE; 
 }
 
+// Move to idle postion. Important: Should only ever be called when in maintenance mode.
+void CMixer::move_to_idle()
+{
+  if (!_attached)
+  {
+    _servo.attach(_servo_pin);
+    _attached = true;
+  }  
+  _servo.write(MIXER_IDLE_POSITION);  
+}
+
+// Move to dispense postion. Important: Should only ever be called when in maintenance mode.
+void CMixer::move_to_dispense()
+{
+  if (!_attached)
+  {
+    _servo.attach(_servo_pin);
+    _attached = true;
+  }  
+  _servo.write(MIXER_DISPENSE_POSITION);  
+}
+
 CDispenser::dispenser_state CMixer::get_status()
 {
   return _state;
