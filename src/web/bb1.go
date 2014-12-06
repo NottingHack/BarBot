@@ -322,6 +322,11 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
     case strings.HasPrefix(req_page, "menu/"):
       adminMenu(w, r, req_page[len("menu/"):])
       return;
+
+    case strings.HasPrefix(req_page, "maintenance/"):
+      adminMaintenance(w, r, req_page[len("maintenance/"):])
+      return;
+
     default:
       http.NotFound(w, r)
       return
@@ -715,6 +720,15 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
   tmpl.ExecuteTemplate(w, "admin_footer" , nil)
   return
 }
+
+func adminMaintenance(w http.ResponseWriter, r *http.Request, param string) {
+  tmpl, _ := template.ParseFiles("admin_header.html", "admin_maintenance.html", "admin_footer.html")
+
+  tmpl.ExecuteTemplate(w, "admin_header" , nil)
+  tmpl.ExecuteTemplate(w, "admin_maintenance", nil)
+  tmpl.ExecuteTemplate(w, "admin_footer" , nil)
+}
+
 
 func adminMenu(w http.ResponseWriter, r *http.Request, param string) {
   tmpl, _ := template.ParseFiles("admin_header.html", "menu.html", "admin_recipe_details.html", "admin_footer.html")
