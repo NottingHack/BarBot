@@ -13,7 +13,11 @@
             <td style="width: 100px;"><a href="{{.Id}}"><img src="{{.ImageName}}" class="img-rounded" width="100px" alt="{{.Name}}"></a></td> 
             {{end}}
             <td>
+            {{if $admin}}
+                <h3><a href="details/{{.Id}}">{{.Name}}</a></h3>
+            {{else}}
                 <h3><a href="{{.Id}}">{{.Name}}</a></h3>
+            {{end}}
                 <p>{{.Description}}</p>
                 <img src="{{.AlcoholIcon}}">
                 <img src="{{.VeganIcon}}">

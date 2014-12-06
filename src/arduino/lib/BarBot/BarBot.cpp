@@ -84,7 +84,10 @@ BarBot::BarBot()
   if (digitalRead(ESTOP_PIN) == LOW)
     set_state(BarBot::IDLE);  // estop not pressed
   else
+  {
+    debug("ESTOP pressed");
     set_state(BarBot::FAULT); // estop pressed
+  }
 
   //pinMode(PLATFORM_TX, OUTPUT);
   //digitalWrite(PLATFORM_TX, LOW);
@@ -422,6 +425,11 @@ bool BarBot::loop()
 void BarBot::set_state(barbot_state new_state)
 {  
   static bool first_run = true;
+  
+  if (new_state == BarBot::IDLE)
+  {
+    debug("set IDLE");
+  }
   
   Serial3.print('0');
   
