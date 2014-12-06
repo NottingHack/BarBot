@@ -724,9 +724,54 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
 func adminMaintenance(w http.ResponseWriter, r *http.Request, param string) {
   tmpl, _ := template.ParseFiles("admin_header.html", "admin_maintenance.html", "admin_footer.html")
 
-  tmpl.ExecuteTemplate(w, "admin_header" , nil)
-  tmpl.ExecuteTemplate(w, "admin_maintenance", nil)
-  tmpl.ExecuteTemplate(w, "admin_footer" , nil)
+  cmd := make([]string, 1)
+ 
+  switch (param) {
+    case "enter":
+      cmd[0] = "A 0 1"
+      
+    case "leave":
+      cmd[0] = "A 0 0"
+      
+    case "opticIdle":
+      cmd[0] = "A 1 0"
+      
+    case "opticDispense":
+      cmd[0] = "A 1 9"
+      
+    case "mixerIdle":
+      cmd[0] = "A 2 0"
+      
+    case "mixerDispense":
+      cmd[0] = "A 2 9"
+      
+    case "d0-on":
+      cmd[0] = "A 3 0"
+      
+    case "d1-on":
+      cmd[0] = "A 3 1"
+      
+    case "d2-on":
+      cmd[0] = "A 3 2"
+      
+    case "d0-off":
+      cmd[0] = "A 4 0"
+      
+    case "d1-off":
+      cmd[0] = "A 4 1"
+      
+    case "d2-off":
+      cmd[0] = "A 4 2"
+
+    default:
+      tmpl.ExecuteTemplate(w, "admin_header" , nil)
+      tmpl.ExecuteTemplate(w, "admin_maintenance", nil)
+      tmpl.ExecuteTemplate(w, "admin_footer" , nil)
+      return
+  }
+     
+  BarbotSerialChan <- cmd
+
 }
 
 
