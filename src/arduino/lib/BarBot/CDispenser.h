@@ -29,7 +29,8 @@ class CDispenser
     {
       IDLE,
       BUSY,
-      FAULT
+      FAULT,
+      MAINT_DISP
     };
 
     CDispenser();

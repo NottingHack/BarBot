@@ -20,6 +20,6 @@ To run the web interface:
     $ cd ~/project/barbot/src/web
     $ go run bb1.go -serial /dev/ttyS0
 
-6. Point your browser at http://localhost:8080/
+6. Point your browser at http://localhost:8080/static/
 
 

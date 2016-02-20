@@ -134,6 +134,10 @@ type AdminControl struct {
   Dispensers      []AdminDispenser
 }
 
+type AdminHeader struct {
+  AllowMaint      bool
+}
+
 const (
   DISPENSER_OPTIC    = 1
   DISPENSER_MIXER    = 2 
@@ -149,6 +153,7 @@ const (
 var BarbotSerialChan chan []string
 var Direct bool
 var Password string
+var AllowMaint bool
 
 // showMenu displays the list of available drinks to the user
 func showMenu(db *sql.DB, w http.ResponseWriter) {
@@ -322,6 +327,11 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
     case strings.HasPrefix(req_page, "menu/"):
       adminMenu(w, r, req_page[len("menu/"):])
       return;
+
+    case strings.HasPrefix(req_page, "maintenance/"):
+      adminMaintenance(w, r, req_page[len("maintenance/"):])
+      return;
+
     default:
       http.NotFound(w, r)
       return
@@ -515,9 +525,10 @@ func adminRecipe(w http.ResponseWriter, r *http.Request, param string) {
   }
   rows.Close()
    
-
+  var adminHead AdminHeader
+  adminHead.AllowMaint = AllowMaint
   
-  tmpl.ExecuteTemplate(w, "admin_header", nil)
+  tmpl.ExecuteTemplate(w, "admin_header", adminHead)
   tmpl.ExecuteTemplate(w, "admin_recipe", adminR)
   tmpl.ExecuteTemplate(w, "admin_footer", nil)
   return
@@ -605,7 +616,9 @@ func adminDispenser(w http.ResponseWriter, r *http.Request, param string) {
     dispensers[dispenser_id].Id = dispenser_id
   }
   
-  tmpl.ExecuteTemplate(w, "admin_header", nil)
+  var adminHead AdminHeader
+  adminHead.AllowMaint = AllowMaint  
+  tmpl.ExecuteTemplate(w, "admin_header", adminHead)
   tmpl.ExecuteTemplate(w, "admin_dispenser", dispensers)
   tmpl.ExecuteTemplate(w, "admin_footer", nil)
   return
@@ -710,11 +723,73 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
     rows.Scan(&dispenser.Id, &dispenser.Name, &dispenser.Rail_position, &dispenser.Ingredient)
     control.Dispensers = append(control.Dispensers, dispenser)
   }
-  tmpl.ExecuteTemplate(w, "admin_header" , nil)
+  
+  var adminHead AdminHeader
+  adminHead.AllowMaint = AllowMaint  
+  tmpl.ExecuteTemplate(w, "admin_header" , adminHead)
   tmpl.ExecuteTemplate(w, "admin_control", control)
   tmpl.ExecuteTemplate(w, "admin_footer" , nil)
   return
 }
+
+func adminMaintenance(w http.ResponseWriter, r *http.Request, param string) {
+  tmpl, _ := template.ParseFiles("admin_header.html", "admin_maintenance.html", "admin_footer.html")
+
+  if AllowMaint == false {
+    return;
+  }
+  cmd := make([]string, 1)
+ 
+  switch (param) {
+    case "enter":
+      cmd[0] = "A 0 1"
+      
+    case "leave":
+      cmd[0] = "A 0 0"
+      
+    case "opticIdle":
+      cmd[0] = "A 1 0"
+      
+    case "opticDispense":
+      cmd[0] = "A 1 9"
+      
+    case "mixerIdle":
+      cmd[0] = "A 2 0"
+      
+    case "mixerDispense":
+      cmd[0] = "A 2 9"
+      
+    case "d0-on":
+      cmd[0] = "A 3 0"
+      
+    case "d1-on":
+      cmd[0] = "A 3 1"
+      
+    case "d2-on":
+      cmd[0] = "A 3 2"
+      
+    case "d0-off":
+      cmd[0] = "A 4 0"
+      
+    case "d1-off":
+      cmd[0] = "A 4 1"
+      
+    case "d2-off":
+      cmd[0] = "A 4 2"
+
+    default:
+      var adminHead AdminHeader
+      adminHead.AllowMaint = AllowMaint  
+      tmpl.ExecuteTemplate(w, "admin_header" , adminHead)
+      tmpl.ExecuteTemplate(w, "admin_maintenance", nil)
+      tmpl.ExecuteTemplate(w, "admin_footer" , nil)
+      return
+  }
+     
+  BarbotSerialChan <- cmd
+
+}
+
 
 func adminMenu(w http.ResponseWriter, r *http.Request, param string) {
   tmpl, _ := template.ParseFiles("admin_header.html", "menu.html", "admin_recipe_details.html", "admin_footer.html")
@@ -756,7 +831,9 @@ func adminMenu(w http.ResponseWriter, r *http.Request, param string) {
     receipe.Ingredients = getRecipeIngrediants(db, recipe_id)
     receipe.RecipeID = recipe_id
     
-    tmpl.ExecuteTemplate(w, "admin_header", nil)
+    var adminHead AdminHeader
+    adminHead.AllowMaint = AllowMaint  
+    tmpl.ExecuteTemplate(w, "admin_header", adminHead)
     tmpl.ExecuteTemplate(w, "admin_recipe_details", receipe)
     tmpl.ExecuteTemplate(w, "admin_footer", nil)
     return
@@ -772,7 +849,9 @@ func adminMenu(w http.ResponseWriter, r *http.Request, param string) {
   
   menu := DrinksMenu{"Drinks", getReceipes(db), true}
 
-  tmpl.ExecuteTemplate(w, "admin_header", nil)
+  var adminHead AdminHeader
+  adminHead.AllowMaint = AllowMaint
+  tmpl.ExecuteTemplate(w, "admin_header", adminHead)
   tmpl.ExecuteTemplate(w, "menu"        , menu)
   tmpl.ExecuteTemplate(w, "admin_footer", nil)
   return
@@ -950,8 +1029,10 @@ func makeOrderDirect(db *sql.DB, w http.ResponseWriter, r *http.Request, p strin
   details.Success = true
 
   BarbotSerialChan <- cmdList
-
-  tmpl.ExecuteTemplate(w, "admin_header", nil)
+  
+  var adminHead AdminHeader
+  adminHead.AllowMaint = AllowMaint
+  tmpl.ExecuteTemplate(w, "admin_header", adminHead)
   tmpl.ExecuteTemplate(w, "admin_make", details)
   tmpl.ExecuteTemplate(w, "admin_footer", nil)
   tmpl.Execute(w, details)
@@ -1334,9 +1415,11 @@ func main() {
   var serialPort = flag.String("serial", "/dev/ttyS0", "Serial port to use")
   var direct     = flag.Bool("direct", false, "Disable order interface")
   var password   = flag.String("password", "clubmate", "Password for order/admin interface"); 
+  var allowMaint = flag.Bool("maint", false, "Allow entry into maintenance mode")
   flag.Parse()
   Direct = *direct
   Password = *password
+  AllowMaint = *allowMaint;
 
   authenticator := auth.NewBasicAuthenticator("BarBot login", Secret)
   

@@ -18,9 +18,10 @@
 #include "Arduino.h"
 #include "AccelStepper.h"
 #include <avr/pgmspace.h>
+#include <avr/wdt.h> 
 #include "Adafruit_NeoPixel.h"
 
-#define MAX_INSTRUCTIONS    100  // Maximum number of instructions that can be stored
+#define MAX_INSTRUCTIONS    100   // Maximum number of instructions that can be stored
 
 #define MAX_MOVE_TIME      19000  // Maximum amount of time moving the platform should take (in ms).
 #define STEPS_PER_CM          48  // Number of steps per CM (platform movement)
@@ -29,7 +30,7 @@
 
 // Harware setup
 #define DISPENSER_COUNT       21  // Number of attached dispensers. If altered, also need to change BarBot::BarBot()
-#define ZERO_SWITCH           37  // Zero/limit switch. Nb - zero switch is now the 'other' side, i.e. position ~7000
+#define ZERO_SWITCH           37  // Zero/limit switch. Nb - zero switch is now the 'other' side, i.e. position ~7000 (MAX_RAIL_POSITION)
 #define ESTOP_PIN             53  // Emergency stop 
 #define SPEED_ZERO           800  // Speed when zeroing
 #define SPEED_NORMAL        1500  // Normal speed
@@ -67,7 +68,8 @@
 
 // Dummy optic values for controlling the neopixels above them
 #define DISPENSER_OPTIC_NONE  -1  // Not currently dispencing from an optic
-#define DISPENSER_OPTIC_FAULT -2  // Turn all neopixels red to indicate something bad has heppened.
+#define DISPENSER_OPTIC_FAULT -2  // Turn all neopixels red to indicate something bad has happened.
+
 
 void debug(char *msg);
 
@@ -90,6 +92,7 @@ class BarBot
       IDLE,
       WAITING,
       RUNNING,
+      MAINT, // Maintainance mode
       FAULT
     };
     
@@ -101,7 +104,13 @@ class BarBot
     bool reset();
     bool loop();
     barbot_state get_state();
-
+    
+    bool maint_mode_enter();
+    bool maint_mode_leave();
+    void maint_mode_optics(uint8_t param); // param=0 - all optics to idle. param=9 - all optics to dispense position.
+    void maint_mode_mixers(uint8_t param); // param=0 - all mixers to idle. param=9 - all mixers to dispense position.
+    void maint_mode_dasher_on(uint8_t dasher);  // dasher = dasher number (0-2) to switch on
+    void maint_mode_dasher_off(uint8_t dasher); // dasher = dasher number (0-2) to switch off
       
   private:
     struct instruction

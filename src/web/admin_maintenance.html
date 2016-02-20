@@ -1,0 +1,54 @@
+{{define "admin_maintenance"}}
+
+<h2>Maintenance</h2>
+Use the options on this page with great care! <br/><br/>
+
+<button type="button" name="move" onclick="maintCmd('enter')" class="btn btn-danger btn-lg">Enter maintenance mode</button>
+<button type="button" name="move" onclick="maintCmd('leave')" class="btn btn-default btn-lg">Leave maintenance mode</button><br/><br/>
+
+  
+<table class="table table-condensed">
+  <tr>
+    <td><h2>Optics</h2><td>
+    <td><button type="button" name="move" onclick="maintCmd('opticIdle')" class="btn btn-default btn-lg">All to idle</button></td>
+    <td><button type="button" name="move" onclick="maintCmd('opticDispense')" class="btn btn-default btn-lg">All to dispense</button></td>
+  </tr>
+  
+  <tr>
+    <td><h2>Mixers</h2><td>
+    <td><button type="button" name="move" onclick="maintCmd('mixerIdle')" class="btn btn-default btn-lg">All to idle</button></td>
+    <td><button type="button" name="move" onclick="maintCmd('mixerDispense')" class="btn btn-default btn-lg">All to dispense</button></td>
+  </tr>
+  <tr>
+    <td><h2>Dasher0</h2><td>
+    <td><button type="button" name="move" onclick="maintCmd('d0-on')" class="btn btn-default btn-lg">On</button></td>
+    <td><button type="button" name="move" onclick="maintCmd('d0-off')" class="btn btn-default btn-lg">Off</button></td>
+  </tr>
+  <tr>
+    <td><h2>Dasher1</h2><td>
+    <td><button type="button" name="move" onclick="maintCmd('d1-on')" class="btn btn-default btn-lg">On</button></td>
+    <td><button type="button" name="move" onclick="maintCmd('d1-off')" class="btn btn-default btn-lg">Off</button></td>
+  </tr>
+  <tr>
+    <td><h2>Dasher2</h2><td>
+    <td><button type="button" name="move" onclick="maintCmd('d2-on')" class="btn btn-default btn-lg">On</button></td>
+    <td><button type="button" name="move" onclick="maintCmd('d2-off')" class="btn btn-default btn-lg">Off</button></td>
+  </tr>
+
+</table>
+
+<script>
+      function maintCmd(cmd)
+      {
+        var xmlhttp;
+        if (window.XMLHttpRequest)
+        {
+          xmlhttp=new XMLHttpRequest();
+        }
+
+        xmlhttp.open("GET","/admin/maintenance/" + cmd, true);
+        xmlhttp.send();
+      }
+    </script>  
+
+{{end}}

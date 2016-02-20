@@ -18,6 +18,8 @@ class CDasher : public CDispenser
      bool             loop();
      dispenser_state  get_status();
      void             stop();
+     void             maint_dasher_on();
+     void             maint_dasher_off();
      
   private:
     unsigned long long _dispense_start;
