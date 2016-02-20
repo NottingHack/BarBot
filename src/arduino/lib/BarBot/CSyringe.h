@@ -36,6 +36,7 @@ class CSyringe : public CDispenser
     uint16_t _dispense_time; // how long in ms to dispense for
     uint8_t _suck_pin;
     uint8_t _squirt_pin;
+    uint16_t _drip_time;
     syringe_state _syr_state;
 };
 

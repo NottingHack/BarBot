@@ -39,8 +39,14 @@ bool CSyringe::dispense(uint16_t qty)
   analogWrite(_suck_pin,0);
   analogWrite(_squirt_pin,150);
 
+  // qty=1 is a specical case that is used to move the syringe upwards. So skip most of the delay for that
+  if (qty == 1)
+    _drip_time = 10;
+  else
+    _drip_time = SYRINGE_DRIP_TIME;
+
   return false;
-};
+}
 
 bool CSyringe::loop()
 {
@@ -69,7 +75,7 @@ bool CSyringe::loop()
     _syr_state = DRIP_WAIT;
   }
 
-  else if ((_syr_state == DRIP_WAIT) && (millis()-_dispense_start >= (_dispense_time+SYRINGE_WAIT_TIME+SYRINGE_SUCK_TIME+SYRINGE_DRIP_TIME)))
+  else if ((_syr_state == DRIP_WAIT) && (millis()-_dispense_start >= (_dispense_time+SYRINGE_WAIT_TIME+SYRINGE_SUCK_TIME+_drip_time)))
   {
     _state = CSyringe::IDLE;
     _syr_state = READY;
