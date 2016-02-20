@@ -140,7 +140,7 @@ type AdminHeader struct {
 
 const (
   DISPENSER_OPTIC    = 1
-  DISPENSER_MIXER    = 2 
+  DISPENSER_MIXER    = 2
   DISPENSER_DASHER   = 3
   DISPENSER_SYRINGE  = 4
   DISPENSER_CONVEYOR = 5
@@ -173,13 +173,13 @@ func getReceipes(db *sql.DB) ([]Recipe) {
 							FROM            recipe r,
 											recipe_ingredient ri,
 											ingredient i,
-											glass_type gt 
+											glass_type gt
 							WHERE           r.id NOT IN (
 									-- sub-select lists IDs of recipes which have missing ingredients
 									SELECT          r.id
-									FROM            recipe_ingredient ri, 
-													recipe r, 
-													ingredient i 
+									FROM            recipe_ingredient ri,
+													recipe r,
+													ingredient i
 									WHERE           r.id = ri.recipe_id
 									AND             ri.ingredient_id = i.id
 									AND             NOT EXISTS (
@@ -256,14 +256,14 @@ func showMenuItem(db *sql.DB, w http.ResponseWriter, r *http.Request) {
 }
 
 func getRecipeIngrediants(db *sql.DB, drink_id string) ([]MenuItemIngredient) {
-  var ingrediants []MenuItemIngredient 
-  
+  var ingrediants []MenuItemIngredient
+
   // Get details of the ingredients
   sql := `
-    select 
+    select
       i.id,
-      i.name, 
-      ri.qty * dt.unit_size as act_act, 
+      i.name,
+      ri.qty * dt.unit_size as act_act,
       case when ri.qty = 1 then dt.unit_name else dt.unit_plural end as uom,
       dt.manual
     from recipe r
@@ -282,7 +282,7 @@ func getRecipeIngrediants(db *sql.DB, drink_id string) ([]MenuItemIngredient) {
     var ingr MenuItemIngredient
     rows.Scan(&ingr.Id, &ingr.Name, &ingr.ActQty, &ingr.UoM, &ingr.Manual)
     ingrediants = append(ingrediants, ingr)
-  }  
+  }
 
   return ingrediants
 }
@@ -293,7 +293,7 @@ func drinksMenuHandler(w http.ResponseWriter, r *http.Request) {
     // Open database
     db := getDBConnection()
     defer db.Close()
-    
+
     if len(r.URL.Path) <= len("/menu/") {
       showMenu(db, w)
     } else {
@@ -302,15 +302,15 @@ func drinksMenuHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func adminHandler(w http.ResponseWriter, r *http.Request) {
-  
+
   // Default admin page is dispenser config for now. So if no subpage is specified, redirect to that
   if (r.URL.Path == "/admin") || (r.URL.Path == "/admin/") {
     http.Redirect(w, r, "/admin/dispenser/", http.StatusSeeOther)
     return
   }
-  
+
   req_page := r.URL.Path[len("/admin/"):]
-  
+
   switch {
     case strings.HasPrefix(req_page, "dispenser/"):
       adminDispenser(w, r, req_page[len("dispenser/"):])
@@ -319,7 +319,7 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
     case strings.HasPrefix(req_page, "recipe/"):
       adminRecipe(w, r, req_page[len("recipe/"):])
       return;
-      
+
     case strings.HasPrefix(req_page, "control/"):
       adminControl(w, r, req_page[len("control/"):])
       return;
@@ -348,11 +348,11 @@ func adminRecipe(w http.ResponseWriter, r *http.Request, param string) {
   db := getDBConnection()
   defer db.Close()
   r.ParseForm()
-  
+
   recipe_id, err := strconv.Atoi(r.Form.Get("recipe_selection"))
   if err != nil {
-    recipe_id = -1  
-  } 
+    recipe_id = -1
+  }
 
   if (param == "add_drink") {
     // returned form is receipe_name=<drink name entered>
@@ -360,19 +360,19 @@ func adminRecipe(w http.ResponseWriter, r *http.Request, param string) {
       http.Redirect(w, r, "/admin/recipe/", http.StatusSeeOther)
       return
     }
-    
+
     // Get glass selection
     glass_type_id, err := strconv.Atoi(r.Form.Get("glass_selection"))
     if err != nil {
       http.Redirect(w, r, "/admin/recipe/", http.StatusSeeOther)
       return
-    }     
+    }
 
     _, err = db.Exec("insert into recipe (name, glass_type_id) values (?, ?)", r.Form.Get("recipe_add"), glass_type_id)
     if err != nil {
       panic(fmt.Sprintf("Failed to update db: %v", err))
     }
-    
+
     // get inserted id
     row := db.QueryRow("select max(id) from recipe")
     err = row.Scan(&recipe_id)
@@ -380,20 +380,20 @@ func adminRecipe(w http.ResponseWriter, r *http.Request, param string) {
       http.Redirect(w, r, "/admin/recipe/", http.StatusSeeOther)
       return
     }
-    
+
     // http.Redirect(w, r, "/admin/recipe/", http.StatusSeeOther)
     // return
   }
-  
+
   if (param == "add_ingrediant") {
     // returned form is wanting to add an ingrediant to a drink
-// NSERT INTO recipe_ingredient (recipe_id, ingredient_id, seq, qty) SELECT r.id, i.id, 4, 1 FROM recipe r, ingredient i WHERE r.name = 'Gin and tonic (lemon lime)' AND i.name = 'Lemon'; 
+// NSERT INTO recipe_ingredient (recipe_id, ingredient_id, seq, qty) SELECT r.id, i.id, 4, 1 FROM recipe r, ingredient i WHERE r.name = 'Gin and tonic (lemon lime)' AND i.name = 'Lemon';
 
     ingredient_id, err := strconv.Atoi(r.Form.Get("ingrediant_selection"))
     if err != nil {
       http.Redirect(w, r, "/admin/recipe/", http.StatusSeeOther)
     }
-    
+
     ingredient_id_remove, err := strconv.Atoi(r.Form.Get("remove_ingr"))
     if err != nil {
       ingredient_id_remove = -1
@@ -402,12 +402,12 @@ func adminRecipe(w http.ResponseWriter, r *http.Request, param string) {
     if err != nil {
       ingredient_qty = -1
     }
-    
+
     // Default to a quantity of 1 if nothing entered or invalid entry
     if ingredient_qty <= 0 {
       ingredient_qty = 1
     }
-    
+
     if ingredient_id_remove > 0 {
       _, err := db.Exec("delete from recipe_ingredient where recipe_id=? and ingredient_id=? ", recipe_id, ingredient_id_remove)
       if err != nil {
@@ -422,8 +422,8 @@ func adminRecipe(w http.ResponseWriter, r *http.Request, param string) {
       if err != nil {
         seq_num = 1
       }
-        
-      
+
+
       _, err = db.Exec("insert into recipe_ingredient (recipe_id, ingredient_id, seq, qty) values (?, ?, ?, ?)", recipe_id, ingredient_id, seq_num, ingredient_qty)
       if err != nil {
         panic(fmt.Sprintf("Failed to update db (add ingrediant): %v", err))
@@ -432,17 +432,17 @@ func adminRecipe(w http.ResponseWriter, r *http.Request, param string) {
     //  http.Redirect(w, r, "/admin/recipe/", http.StatusSeeOther)
   //   return
   }
-  
-  var adminR AdminRecipe 
-  
-  
+
+  var adminR AdminRecipe
+
+
   if (recipe_id > 0) {
     adminR.RecipieSelected = true
   } else
   {
     adminR.RecipieSelected = false
   }
-  
+
   // Get a list of all drinks for list box
   rows, err := db.Query("select r.id, r.name, r.glass_type_id from recipe r order by r.name")
   if err != nil {
@@ -463,7 +463,7 @@ func adminRecipe(w http.ResponseWriter, r *http.Request, param string) {
     adminR.Recipes = append(adminR.Recipes, recipe)
   }
   rows.Close()
-  
+
   // Get a list of glass types for the glass selection listbox
   rows, err = db.Query("select g.id, g.name from glass_type g order by g.name")
   if err != nil {
@@ -481,8 +481,8 @@ func adminRecipe(w http.ResponseWriter, r *http.Request, param string) {
     }
     adminR.GlassTypes = append(adminR.GlassTypes, glass)
   }
-  rows.Close()    
- 
+  rows.Close()
+
   // Get a list of all ingrediants for the "add" list box
   rows, err = db.Query("select i.id, i.name from ingredient i order by i.name")
   if err != nil {
@@ -496,13 +496,13 @@ func adminRecipe(w http.ResponseWriter, r *http.Request, param string) {
     adminR.AllIngredients = append(adminR.AllIngredients, recipeIngr)
   }
   rows.Close()
-  
+
   // Get a list of all ingrediants in the currently selected drink
   adminR.RecipieId = recipe_id
-  
-  sqlstr :=  
+
+  sqlstr :=
     `   select
-          i.id,  
+          i.id,
           i.name,
           ri.qty * dt.unit_size,
           case when ri.qty = 1 then dt.unit_name else dt.unit_plural end as uom
@@ -511,7 +511,7 @@ func adminRecipe(w http.ResponseWriter, r *http.Request, param string) {
         inner join dispenser_type dt on dt.id = i.dispenser_type_id
         where ri.recipe_id = ?
         order by ri.seq`
-        
+
   rows, err = db.Query(sqlstr, recipe_id)
   if err != nil {
     panic(fmt.Sprintf("%v", err))
@@ -524,17 +524,17 @@ func adminRecipe(w http.ResponseWriter, r *http.Request, param string) {
     adminR.RecIngredients = append(adminR.RecIngredients, recipeIngr)
   }
   rows.Close()
-   
+
   var adminHead AdminHeader
   adminHead.AllowMaint = AllowMaint
-  
+
   tmpl.ExecuteTemplate(w, "admin_header", adminHead)
   tmpl.ExecuteTemplate(w, "admin_recipe", adminR)
   tmpl.ExecuteTemplate(w, "admin_footer", nil)
   return
 }
 
- 
+
 // adminDispenser shows the despenser selection page of the admin interface
 func adminDispenser(w http.ResponseWriter, r *http.Request, param string) {
 
@@ -581,7 +581,7 @@ func adminDispenser(w http.ResponseWriter, r *http.Request, param string) {
       i.id as ingredient_id,
       i.name as ingredient_name,
       ifnull(d.ingredient_id, -1)
-    from dispenser d 
+    from dispenser d
     inner join dispenser_type dt on dt.id = d.dispenser_type_id
     left outer join ingredient i on d.dispenser_type_id = i.dispenser_type_id
     where dt.manual = 0
@@ -601,7 +601,7 @@ func adminDispenser(w http.ResponseWriter, r *http.Request, param string) {
     var dispenser_name string
     var current int
     var ingredient_id int
-      
+
     rows.Scan(&dispenser_id, &dispenser_name, &current, &ingr.Id, &ingr.Name, ingredient_id)
     if current==1 {
       ingr.Current = true
@@ -615,9 +615,9 @@ func adminDispenser(w http.ResponseWriter, r *http.Request, param string) {
     dispensers[dispenser_id].Name = dispenser_name
     dispensers[dispenser_id].Id = dispenser_id
   }
-  
+
   var adminHead AdminHeader
-  adminHead.AllowMaint = AllowMaint  
+  adminHead.AllowMaint = AllowMaint
   tmpl.ExecuteTemplate(w, "admin_header", adminHead)
   tmpl.ExecuteTemplate(w, "admin_dispenser", dispensers)
   tmpl.ExecuteTemplate(w, "admin_footer", nil)
@@ -633,7 +633,7 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
   defer db.Close()
 
   sendmsg := true
-  
+
   // Get reguested command from param (e.g. for move/1234, set cmd = move)
   i := strings.Index(param, "/")
   if i > 0 {
@@ -642,16 +642,16 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
     cmd = param
   }
   cmdlist := make([]string, 1)
-  
+
   switch (cmd) {
     case "reset":
       cmdlist[0] = "R"
-      
+
     case "zero":
       cmdlist[0] = "C"               // Clear current instructions
       cmdlist = append(cmdlist, "Z") // Zero
       cmdlist = append(cmdlist, "G") // Go
-      
+
     case "move":
       rail_position, err := strconv.Atoi(param[len("move/"):])
       if err != nil {
@@ -664,7 +664,7 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
     case "dispense":
       var dispenser_id int
       var dispenser_param int
-      
+
       ret, err := fmt.Sscanf(param[len("dispense/"):], "%d/%d", &dispenser_id, &dispenser_param)
       if err != nil || ret != 2 {
         return
@@ -677,7 +677,7 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
       var dispenser_id int
       var dispenser_param int
       var rail_position int
-      
+
       ret, err := fmt.Sscanf(param[len("md/"):], "%d/%d/%d", &rail_position, &dispenser_id, &dispenser_param)
       if err != nil || ret != 3 {
         return
@@ -703,13 +703,13 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
       d.name as dispenser_name,
       d.rail_position,
       ifnull(i.name, '(None)')
-    from dispenser d 
+    from dispenser d
     inner join dispenser_type dt on dt.id = d.dispenser_type_id
     left outer join ingredient i on i.id = d.ingredient_id
     where dt.manual = 0
     order by d.id
   `
-  
+
   rows, err := db.Query(sql)
   if err != nil {
     panic(fmt.Sprintf("%v", err))
@@ -723,9 +723,9 @@ func adminControl(w http.ResponseWriter, r *http.Request, param string) {
     rows.Scan(&dispenser.Id, &dispenser.Name, &dispenser.Rail_position, &dispenser.Ingredient)
     control.Dispensers = append(control.Dispensers, dispenser)
   }
-  
+
   var adminHead AdminHeader
-  adminHead.AllowMaint = AllowMaint  
+  adminHead.AllowMaint = AllowMaint
   tmpl.ExecuteTemplate(w, "admin_header" , adminHead)
   tmpl.ExecuteTemplate(w, "admin_control", control)
   tmpl.ExecuteTemplate(w, "admin_footer" , nil)
@@ -739,53 +739,53 @@ func adminMaintenance(w http.ResponseWriter, r *http.Request, param string) {
     return;
   }
   cmd := make([]string, 1)
- 
+
   switch (param) {
     case "enter":
       cmd[0] = "A 0 1"
-      
+
     case "leave":
       cmd[0] = "A 0 0"
-      
+
     case "opticIdle":
       cmd[0] = "A 1 0"
-      
+
     case "opticDispense":
       cmd[0] = "A 1 9"
-      
+
     case "mixerIdle":
       cmd[0] = "A 2 0"
-      
+
     case "mixerDispense":
       cmd[0] = "A 2 9"
-      
+
     case "d0-on":
       cmd[0] = "A 3 0"
-      
+
     case "d1-on":
       cmd[0] = "A 3 1"
-      
+
     case "d2-on":
       cmd[0] = "A 3 2"
-      
+
     case "d0-off":
       cmd[0] = "A 4 0"
-      
+
     case "d1-off":
       cmd[0] = "A 4 1"
-      
+
     case "d2-off":
       cmd[0] = "A 4 2"
 
     default:
       var adminHead AdminHeader
-      adminHead.AllowMaint = AllowMaint  
+      adminHead.AllowMaint = AllowMaint
       tmpl.ExecuteTemplate(w, "admin_header" , adminHead)
       tmpl.ExecuteTemplate(w, "admin_maintenance", nil)
       tmpl.ExecuteTemplate(w, "admin_footer" , nil)
       return
   }
-     
+
   BarbotSerialChan <- cmd
 
 }
@@ -826,19 +826,19 @@ func adminMenu(w http.ResponseWriter, r *http.Request, param string) {
     tx, _ := db.Begin()
     defer tx.Rollback()
     receipe.Alcohol = recipeContainsAlcohol(tx, recipe_id)
-      
+
     // Get list of ingrediants
     receipe.Ingredients = getRecipeIngrediants(db, recipe_id)
     receipe.RecipeID = recipe_id
-    
+
     var adminHead AdminHeader
-    adminHead.AllowMaint = AllowMaint  
+    adminHead.AllowMaint = AllowMaint
     tmpl.ExecuteTemplate(w, "admin_header", adminHead)
     tmpl.ExecuteTemplate(w, "admin_recipe_details", receipe)
     tmpl.ExecuteTemplate(w, "admin_footer", nil)
     return
   }
-  
+
   if strings.HasPrefix(param, "make/") {
     if !makeOrderDirect(db, w, r, param[len("make/"):]) {
       http.NotFound(w, r)
@@ -846,7 +846,7 @@ func adminMenu(w http.ResponseWriter, r *http.Request, param string) {
     }
     return
   }
-  
+
   menu := DrinksMenu{"Drinks", getReceipes(db), true}
 
   var adminHead AdminHeader
@@ -884,7 +884,7 @@ func orderListHandler(w http.ResponseWriter, r *http.Request) {
     if len(r.URL.Path) > len("/orderlist/") {
 
       // Check if user has clicked on a on order
-      var p string = r.URL.Path[len("/orderlist/"):] 
+      var p string = r.URL.Path[len("/orderlist/"):]
       switch  {
         case strings.HasPrefix(p, "remove/"):
           removeOrder(db, w, r, p[len("remove/"):])
@@ -896,7 +896,7 @@ func orderListHandler(w http.ResponseWriter, r *http.Request) {
             http.NotFound(w, r)
           }
           return
-          
+
         case strings.HasPrefix(p, "complete/"):
           if !completeOrder(db, w, r, p[len("complete/"):]) {
             http.NotFound(w, r)
@@ -931,7 +931,7 @@ func orderListHandler(w http.ResponseWriter, r *http.Request) {
           panic(fmt.Sprintf("orderListHandler - failed to get order details: %#v", err))
         }
       }
-      
+
       // Get list of ingrediants
       orderdetails.Ingredients = getRecipeIngrediants(db, recipe_id)
     }
@@ -943,13 +943,13 @@ func orderListHandler(w http.ResponseWriter, r *http.Request) {
 
 // removeOrder is called when an order is selected and "remove" clicked. In reality it actaully cancels, not deletes, it.
 func removeOrder(db *sql.DB, w http.ResponseWriter, r *http.Request, p string) bool {
-  
+
   sqlstr := `
-    update drink_order 
+    update drink_order
     set cancelled = ?
     where id = ?
       and made_end_ts is null`
-      
+
   _, err := db.Exec(sqlstr, true, p)
 
   if err != nil {
@@ -961,20 +961,20 @@ func removeOrder(db *sql.DB, w http.ResponseWriter, r *http.Request, p string) b
 
 func makeOrder(db *sql.DB, w http.ResponseWriter, r *http.Request, p string) bool {
   var details OrderSent
-  
+
   drink_order_id, err := strconv.Atoi(p)
   if err != nil {
-    return false 
-  } 
-  
+    return false
+  }
+
   details.OrderId = fmt.Sprintf(ORDER_FMT, drink_order_id)
-  
+
   // Generate command list. This will fail if not all the ingrediants are present
   fmt.Printf("makeOrder: preparing command list for order [%d]\n", drink_order_id)
   cmdList, ret, recipe_id := getCommandList(drink_order_id, -1)
-  
+
   details.Ingredients = getRecipeIngrediants(db, strconv.Itoa(recipe_id))
-  
+
   if ret != 0 {
     fmt.Printf("makeOrder: failed to generate command list!\n")
     details.Success = false
@@ -994,22 +994,22 @@ func makeOrder(db *sql.DB, w http.ResponseWriter, r *http.Request, p string) boo
   if err != nil {
     panic(fmt.Sprintf("completeOrder: Failed to update db: %v", err))
   }
-  
+
   BarbotSerialChan <- cmdList
-  
+
   t, _ := template.ParseFiles("order_make.html")
   t.Execute(w, details)
-    
+
   return true
 }
 
 // makeOrderDirect expect <p> to be the recipe_id
 func makeOrderDirect(db *sql.DB, w http.ResponseWriter, r *http.Request, p string) bool {
   var details OrderSent
-  
+
   recipe_id, err := strconv.Atoi(p)
   if err != nil {
-    return false 
+    return false
   }
 
   tmpl, _ := template.ParseFiles("admin_header.html", "admin_make.html", "admin_footer.html")
@@ -1029,7 +1029,7 @@ func makeOrderDirect(db *sql.DB, w http.ResponseWriter, r *http.Request, p strin
   details.Success = true
 
   BarbotSerialChan <- cmdList
-  
+
   var adminHead AdminHeader
   adminHead.AllowMaint = AllowMaint
   tmpl.ExecuteTemplate(w, "admin_header", adminHead)
@@ -1044,9 +1044,9 @@ func completeOrder(db *sql.DB, w http.ResponseWriter, r *http.Request, p string)
 
   drink_order_id, err := strconv.Atoi(p)
   if err != nil {
-    return false 
-  } 
-  
+    return false
+  }
+
   _, err = db.Exec(
     "update drink_order set made_end_ts = ? where id = ?",
     int32(time.Now().Unix()),
@@ -1055,9 +1055,9 @@ func completeOrder(db *sql.DB, w http.ResponseWriter, r *http.Request, p string)
   if err != nil {
     panic(fmt.Sprintf("completeOrder: Failed to update db: %v", err))
   }
-  
+
   http.Redirect(w, r, "/orderlist/", http.StatusSeeOther)
-  
+
   return true
 }
 
@@ -1070,7 +1070,7 @@ func recipeContainsAlcohol(tx *sql.Tx, recipe_id string) bool {
         INNER JOIN ingredient i ON i.id = ri.ingredient_id
         WHERE      r.id = ?
         AND        alcoholic = 1`
-  
+
   var alcoholic int
   row := tx.QueryRow(sql, recipe_id)
 
@@ -1079,7 +1079,7 @@ func recipeContainsAlcohol(tx *sql.Tx, recipe_id string) bool {
     panic(fmt.Sprintf("recipeContainsAlcohol failed: %v", err))
     return true
   }
-  
+
   if alcoholic > 0 {
     return true
   } else {
@@ -1115,10 +1115,10 @@ func recipeIsVegan(tx *sql.Tx, recipe_id string) bool {
 
 }
 func orderDrinkHandler(w http.ResponseWriter, r *http.Request) {
-  
+
     var err error
     var db *sql.DB
-    
+
     if len(r.URL.Path) <= len("/order/") {
       http.NotFound(w, r)
       return
@@ -1186,17 +1186,17 @@ func getDBConnection() *sql.DB {
 
 // BBSerial goroutine manages serial communications with barbot
 func BBSerial(instructionList chan []string, serialPort string) {
-  
+
   // Open serial port
-  port := &serial.Config{Name: serialPort, Baud: 115200} 
+  port := &serial.Config{Name: serialPort, Baud: 115200}
   s, err := serial.OpenPort(port)
   if err != nil {
     panic(fmt.Sprintf("BBSerial failed to open serial port: %v", err))
   }
-  
+
 
   serialReadChan := make(chan string)
- 
+
   // read from serial port
   go func() {
     reader := bufio.NewReader(s)
@@ -1231,26 +1231,26 @@ func BBSerial(instructionList chan []string, serialPort string) {
         fmt.Printf("< %s\n", recieced_msg)
     }
   }
-  
+
 }
 
-// getCommandList takes a drink_order_id, and returns a set of insturctions to be sent to 
+// getCommandList takes a drink_order_id, and returns a set of insturctions to be sent to
 // barbot to make it, a retval (0=success) and the recipe_id
 func getCommandList(drink_order_id int, recipe_id int) ([]string, int, int) {
 /*
  * Instructions generated:
  *   M nnnnn               - move to rail position nnnnn
  *   D nn xxxx             - Dispense using dispenser nn, with parameter xxxx
- * 
+ *
  */
-  
+
    db := getDBConnection()
    defer db.Close()
- 
+
    var sql_param int
    var ret_recipe_id int
    // Get a list of ingrediants required
-   sqlstr := `select 
+   sqlstr := `select
                 i.id,
                 ri.qty,
                 i.dispenser_param,
@@ -1287,9 +1287,9 @@ func getCommandList(drink_order_id int, recipe_id int) ([]string, int, int) {
   }
   defer rows.Close()
 
-  
+
   commandList := make([]string, 1)
-  
+
   // Clear any previous instructions
   commandList = append(commandList, fmt.Sprintf("C"))
 
@@ -1304,9 +1304,9 @@ func getCommandList(drink_order_id int, recipe_id int) ([]string, int, int) {
     var dispenser_param int
     var dispenser_type int
     var unit_size int
-      
+
     rows.Scan(&ingredient_id, &qty, &dispenser_param, &dispenser_type, &unit_size, &ret_recipe_id)
-    
+
     rail_position, dispenser_id := getIngredientPosition(ingredient_id)
     if dispenser_id == -1 {
       return nil, -1, ret_recipe_id
@@ -1317,7 +1317,7 @@ func getCommandList(drink_order_id int, recipe_id int) ([]string, int, int) {
 
     // Dispense
     switch dispenser_type {
-      case DISPENSER_MIXER, DISPENSER_SYRINGE: 
+      case DISPENSER_MIXER, DISPENSER_SYRINGE:
       // For the mixer and syringe, send qty as the number of milliseconds to dispense for
         adj_param := (qty * 1000) / dispenser_param
 
@@ -1340,10 +1340,10 @@ func getCommandList(drink_order_id int, recipe_id int) ([]string, int, int) {
       }
     }
   }
-  
+
   // move to home position when done
   commandList = append(commandList, fmt.Sprintf("M 7080")) // TODO: move to home command.
-  
+
   // Go!
   commandList = append(commandList, fmt.Sprintf("G"))
 
@@ -1363,10 +1363,10 @@ func getDrinkIcon(drinkName string, glassName string) string {
 
 // getIngredientPosition returns a suitable rail_position and dispenser_id for the requested ingrediant
 func getIngredientPosition(ingredient_id int) (int, int) {
-  
+
    db := getDBConnection()
    defer db.Close()
-  
+
   sqlstr := `select d.id, d.rail_position
              from dispenser d
              inner join ingredient i on i.id = d.ingredient_id
@@ -1391,11 +1391,11 @@ func getIngredientPosition(ingredient_id int) (int, int) {
 }
 
 func Secret(user, realm string) string {
-  // Ignore all MD5 stuff - it's for the benifit of go-http-auth; the password is sent by 
+  // Ignore all MD5 stuff - it's for the benifit of go-http-auth; the password is sent by
   // the browser in clear text and specifed on the command line in clear text.
-  
+
   if user == "barbot" {
-    
+
     e := auth.NewMD5Entry("$1$YeNsbWdH$wvOF8JdqsoiLix754LTW90") // used for salt
     if e == nil {
       return ""
@@ -1411,10 +1411,10 @@ func main() {
   // 1. Normal - View drinks list at /menu/, order, then operator uses /orderlist/ to pick then make the drink
   // 2. Direct - Drinks menu available at /menu/, but no option to order. Drinks can be made by picking from
   //             a list at /admin/drinks/
-  
+
   var serialPort = flag.String("serial", "/dev/ttyS0", "Serial port to use")
   var direct     = flag.Bool("direct", false, "Disable order interface")
-  var password   = flag.String("password", "clubmate", "Password for order/admin interface"); 
+  var password   = flag.String("password", "clubmate", "Password for order/admin interface");
   var allowMaint = flag.Bool("maint", false, "Allow entry into maintenance mode")
   flag.Parse()
   Direct = *direct
@@ -1422,7 +1422,7 @@ func main() {
   AllowMaint = *allowMaint;
 
   authenticator := auth.NewBasicAuthenticator("BarBot login", Secret)
-  
+
   http.HandleFunc("/menu/", drinksMenuHandler)
   if !Direct {
   http.HandleFunc("/order/", orderDrinkHandler)
@@ -1435,7 +1435,7 @@ func main() {
        http.Redirect(w, r, "/menu/", http.StatusSeeOther)
        return
   })
-  
+
   BarbotSerialChan = make(chan []string);
   go BBSerial(BarbotSerialChan, *serialPort)
 
