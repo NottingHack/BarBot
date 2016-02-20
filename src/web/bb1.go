@@ -165,60 +165,62 @@ func showMenu(db *sql.DB, w http.ResponseWriter) {
   tmpl.ExecuteTemplate(w, "main_footer", nil)
 }
 
-func getReceipes(db *sql.DB) ([]Recipe) {
+func getReceipes(db *sql.DB) []Recipe {
   var recipes []Recipe
 
-      // Load drinks - only show those that can currently be made
-  rows, err := db.Query(`   SELECT          r.id, r.name, r.description, gt.name, NOT(SUM(NOT(i.vegan)) > 0), SUM(i.alcoholic) > 0
-							FROM            recipe r,
-											recipe_ingredient ri,
-											ingredient i,
-											glass_type gt
-							WHERE           r.id NOT IN (
-									-- sub-select lists IDs of recipes which have missing ingredients
-									SELECT          r.id
-									FROM            recipe_ingredient ri,
-													recipe r,
-													ingredient i
-									WHERE           r.id = ri.recipe_id
-									AND             ri.ingredient_id = i.id
-									AND             NOT EXISTS (
-											SELECT  1
-											FROM    dispenser d
-											WHERE   d.ingredient_id = i.id
-									)
-							)
-							AND             ri.ingredient_id = i.id
-							AND             ri.recipe_id = r.id
-							AND             r.glass_type_id = gt.id
-							GROUP BY        r.name, r.name, r.description, gt.name`)
-      if err != nil {
-        panic(fmt.Sprintf("%v", err))
-      }
-      defer rows.Close()
+  // Load drinks - only show those that can currently be made
+  rows, err := db.Query(`
+    SELECT   r.id, r.name, r.description, gt.name, NOT(SUM(NOT(i.vegan)) > 0), SUM(i.alcoholic) > 0
+    FROM     recipe r,
+             recipe_ingredient ri,
+             ingredient i,
+             glass_type gt
+    WHERE    r.id NOT IN (
+             -- sub-select lists IDs of recipes which have missing ingredients
+             SELECT r.id
+             FROM   recipe_ingredient ri,
+                    recipe r,
+                    ingredient i
+             WHERE  r.id = ri.recipe_id
+             AND    ri.ingredient_id = i.id
+             AND    NOT EXISTS (
+                    SELECT  1
+                    FROM    dispenser d
+                    WHERE   d.ingredient_id = i.id
+             )
+    )
+    AND      ri.ingredient_id = i.id
+    AND      ri.recipe_id = r.id
+    AND      r.glass_type_id = gt.id
+    GROUP BY r.name, r.name, r.description, gt.name`)
 
-      for rows.Next() {
-        var recipe Recipe
+  if err != nil {
+    panic(fmt.Sprintf("%v", err))
+  }
+  defer rows.Close()
+
+  for rows.Next() {
+    var recipe Recipe
     rows.Scan(&recipe.Id, &recipe.Name, &recipe.Description, &recipe.GlassName, &recipe.Vegan, &recipe.Alcoholic)
-	recipe.ImageName = getDrinkIcon(recipe.Name, recipe.GlassName)
+    recipe.ImageName = getDrinkIcon(recipe.Name, recipe.GlassName)
 
-	if recipe.Vegan {
-		recipe.VeganIcon = "/static/images/vegan.png"
-	} else {
-		recipe.VeganIcon = "/static/images/animal-product.png"
-	}
+    if recipe.Vegan {
+      recipe.VeganIcon = "/static/images/vegan.png"
+    } else {
+      recipe.VeganIcon = "/static/images/animal-product.png"
+    }
 
-	if recipe.Alcoholic {
-		recipe.AlcoholIcon = "/static/images/alcohol.png"
-	} else {
-		recipe.AlcoholIcon = "/static/images/non-alcoholic.png"
-	}
-        recipes = append(recipes, recipe)
-      }
-      rows.Close()
+    if recipe.Alcoholic {
+      recipe.AlcoholIcon = "/static/images/alcohol.png"
+    } else {
+      recipe.AlcoholIcon = "/static/images/non-alcoholic.png"
+    }
+    recipes = append(recipes, recipe)
+  }
 
   return recipes
 }
+
 
 // showMenuItem shows details of a drink selected from the menu (ingredients, etc)
 func showMenuItem(db *sql.DB, w http.ResponseWriter, r *http.Request) {
