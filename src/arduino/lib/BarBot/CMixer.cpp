@@ -45,6 +45,9 @@ bool CMixer::dispense(uint16_t qty)
 
 bool CMixer::loop()
 {
+  if (_state == CMixer::MAINT_DISP)
+    return true;
+
   if (_attached && (_state != CMixer::BUSY) && (millis()-_last_used > MIXER_DETTACH_TIME))
   {
     _servo.detach();
@@ -82,12 +85,8 @@ void CMixer::stop()
 // Move to idle postion. Important: Should only ever be called when in maintenance mode.
 void CMixer::move_to_idle()
 {
-  if (!_attached)
-  {
-    _servo.attach(_servo_pin);
-    _attached = true;
-  }  
-  _servo.write(MIXER_IDLE_POSITION);  
+  _state = CMixer::IDLE;
+  dispense(1); 
 }
 
 // Move to dispense postion. Important: Should only ever be called when in maintenance mode.
@@ -98,6 +97,7 @@ void CMixer::move_to_dispense()
     _servo.attach(_servo_pin);
     _attached = true;
   }  
+  _state = CMixer::MAINT_DISP; 
   _servo.write(MIXER_DISPENSE_POSITION);  
 }
 

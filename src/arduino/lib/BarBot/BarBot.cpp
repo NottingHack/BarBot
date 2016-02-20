@@ -433,14 +433,6 @@ void BarBot::set_state(barbot_state new_state)
   
   Serial3.print('0');
   
-  // Because maintenance mode does weird things, the only way out at the moment
-  // is a (potentially soft) reset.
-  if (new_state == BarBot::MAINT)
-  {
-    debug("ERROR: In maint mode");
-    return;
-  }
-  
   if (new_state == BarBot::FAULT)
   {
     debug("FAULT.");
@@ -660,10 +652,7 @@ bool BarBot::maint_mode_enter()
 
 bool BarBot::maint_mode_leave()
 {
-  // The easiest way to get back into a known state is just to reset
-  wdt_enable(WDTO_2S); // Watchdog abuse...
-  while(1);
-  return false;
+  set_state(BarBot::FAULT);
 }
 
 // Optic maintenance
@@ -717,6 +706,7 @@ void BarBot::maint_mode_mixers(uint8_t param)
       break;
       
     default:
+      debug("Mixer command error");
       break;
   }
 }

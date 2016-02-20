@@ -20,6 +20,7 @@ BarBot *bb;
 
 void setup()
 {
+  wdt_disable();
   bb = new BarBot();
   Serial.begin(9600);      // For debug info only
   Serial2.begin(115200);   // Communication with Pi
@@ -168,6 +169,7 @@ void process_message(char *msg)
           return;
           break;
       }
+      break;
      
     default:
       Serial.println("Unexpected instruction!");
