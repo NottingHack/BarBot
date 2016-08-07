@@ -17,7 +17,8 @@ CREATE TABLE drink_order (
     id_checked          BOOLEAN NOT NULL,
     cancelled           BOOLEAN NOT NULL,
     made_start_ts       INTEGER NULL,
-    made_end_ts         INTEGER NULL
+    made_end_ts         INTEGER NULL,
+    name                TEXT NULL
 );
 
 CREATE TABLE recipe ( 

@@ -24,11 +24,21 @@
         {{end}}
       {{end}}
 
-    <a href="/menu/" class="btn btn-default btn-lg" role="button">Back</a>
-    {{if not .Direct}}
-    <a href="/order/{{.Id}}" class="btn btn-success btn-lg" role="button">Order</a>
-    {{end}}
+      
+    <form role="form" action="/order/{{.Id}}" class="navbar-form navbar-left" method="post">
+      {{if not .Direct}}
+        <p>
+        <label>Name:</label>
+        <input type="text" class="form-control" name="bbname" id="bbname">
+        </p>
+      {{end}}
+        
+      <a href="/menu/" class="btn btn-default btn-lg" role="button">Back</a>
+      {{if not .Direct}}
+        <button type="submit" class="btn btn-success btn-lg">Order</button>
+      {{end}}
 
+    </form>
 
 
     <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->

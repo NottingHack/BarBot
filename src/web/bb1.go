@@ -78,6 +78,7 @@ type OrderDetails struct {
   OrderRefs   []string  // list of order refs for order selection list on left of screen
   Ingredients []MenuItemIngredient
   Glass       GlassType
+  Name        string
 }
 
 type RecipeDetails struct {
@@ -914,7 +915,8 @@ func orderListHandler(w http.ResponseWriter, r *http.Request) {
           r.name,
           do.recipe_id,
           gt.id,
-          gt.name
+          gt.name,
+          ifnull(do.name, 'not set')
         from drink_order do
         inner join recipe r on do.recipe_id = r.id
         inner join glass_type gt on r.glass_type_id = gt.id
@@ -922,7 +924,7 @@ func orderListHandler(w http.ResponseWriter, r *http.Request) {
 
       row := db.QueryRow(sqlstr, orderdetails.OrderRef)
       var recipe_id string
-      err := row.Scan(&orderdetails.Alcohol, &orderdetails.IdCheck, &orderdetails.DrinkName, &recipe_id, &orderdetails.Glass.Id, &orderdetails.Glass.Name)
+      err := row.Scan(&orderdetails.Alcohol, &orderdetails.IdCheck, &orderdetails.DrinkName, &recipe_id, &orderdetails.Glass.Id, &orderdetails.Glass.Name, &orderdetails.Name)
       if err == sql.ErrNoRows {
         http.NotFound(w, r)
         return
@@ -1118,6 +1120,14 @@ func orderDrinkHandler(w http.ResponseWriter, r *http.Request) {
   
     var err error
     var db *sql.DB
+    var bbname string
+    
+    r.ParseForm()
+    if len(r.Form.Get("bbname")) >= 1 {
+      bbname = r.Form.Get("bbname")
+    } else {
+      bbname = "[not entered]"
+    }
     
     if len(r.URL.Path) <= len("/order/") {
       http.NotFound(w, r)
@@ -1145,13 +1155,14 @@ func orderDrinkHandler(w http.ResponseWriter, r *http.Request) {
 
    // Generate order
    _, insertErr := tx.Exec(
-     "insert into drink_order (create_ts, recipe_id, alcohol, id_checked, cancelled) VALUES (?, ?, ?, ?, ?)",
+     "insert into drink_order (create_ts, recipe_id, alcohol, id_checked, cancelled, name) VALUES (?, ?, ?, ?, ?, ?)",
      int32(time.Now().Unix()),
      recipe_id,
      alcoholic,
      false,
      false,
-   )
+     bbname)
+
    if insertErr != nil {
      panic(fmt.Sprintf("Insert order failed: %v", insertErr))
    }
